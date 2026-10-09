@@ -28,7 +28,7 @@ def test_binary_stl(tmp_path):
     write_binary_stl(path, np.concatenate([TRIANGLE, TRIANGLE + 2]))
     mesh = load_mesh(path)
     assert mesh.n_faces == 2
-    np.testing.assert_allclose(mesh.vertices[3:6], TRIANGLE + 2)
+    np.testing.assert_allclose(mesh.vertices[mesh.faces[1]], TRIANGLE + 2)
 
 
 def test_ascii_stl(tmp_path):
@@ -224,6 +224,21 @@ def test_brace_is_a_plain_cylinder():
         "settings": {"tip": {"diameter": 1.0, "pointDiameter": 0.3, "length": 2}},
     }}}
     mesh = supports.build(record, {"o": np.eye(4)}, {"o": {}}, sides=8)["o"]
-    assert mesh.n_faces == 4 * 8  # exactly one capped cylinder: no tip cone, no joint sphere
+    assert mesh.n_faces == 2 * 8  # one open cylinder (ends hidden in the parents): no cone, joint or caps
     radii = np.linalg.norm(np.cross(mesh.vertices - [0, 0, 10], [5, 0, -5]) / np.linalg.norm([5, 0, -5]), axis=1)
     np.testing.assert_allclose(radii[radii > 1e-6], 0.5, atol=1e-6)  # constant radius along the brace
+
+
+def test_stl_shared_corners_are_merged(tmp_path):
+    path = tmp_path / "quad.stl"
+    quad = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 0, 0], [1, 1, 0], [0, 1, 0]], dtype=np.float32)
+    write_binary_stl(path, quad)
+    mesh = load_mesh(path)
+    assert len(mesh.vertices) == 4 and mesh.faces.dtype == np.int32
+    np.testing.assert_array_equal(mesh.vertices[mesh.faces].reshape(-1, 3), quad)  # same triangles, same order
+
+
+def test_support_ends_capped_only_where_exposed():
+    mesh = supports.frustums(np.zeros((2, 3)), np.array([[0, 0, 1.0], [1, 0, 0]]), np.ones(2), np.ones(2),
+                             sides=8, cap0=[True, False], cap1=[False, False])
+    assert mesh.n_faces == 2 * (2 * 8) + 8  # two open tubes plus one end disc

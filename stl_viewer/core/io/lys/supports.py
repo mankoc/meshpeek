@@ -6,6 +6,8 @@ A branch support (`isBaseTip`) starts on its parent's column and runs to its own
 A brace (`parentTipId` set) has its tip on another support instead of the model: plain cylinder, no cone.
 Bends (knee, tip cone end) get a sphere so the joints look rounded instead of cut. Only the part of
 each sphere outside both adjoining segments is kept; branch starts need none (they sit inside the parent).
+Segment ends are only capped where they are exposed (the tip touching the model, the underside of the
+foot); every other end is hidden inside a joint, the next segment or a parent support.
 
 Coordinates (checked against sample files): `tip` is in the tip object's space. Branch `base` points are in
 the base object's space and lie exactly on the parent column. Plate `base` points are at plate height with
@@ -17,7 +19,7 @@ runtime and is not stored in the file.
 
 import numpy as np
 
-from ...mesh import Mesh
+from ...mesh import FACE_DTYPE, Mesh
 
 SIDES = 12  # default facets around each support column
 
@@ -50,7 +52,7 @@ def build(
     `transforms` holds the placed objects' matrices; `objects` their Lychee records (position, grid mode).
     `sides` is the facet count around columns and joint spheres (render detail).
     """
-    segments: dict[str, tuple[list, list, list, list]] = {}  # tip object id -> p0, p1, r0, r1
+    segments: dict[str, tuple[list, ...]] = {}  # tip object id -> p0, p1, r0, r1, cap0, cap1
     joints: dict[str, tuple[list, list, list, list]] = {}  # tip object id -> centres, radii, arm a, arm b
 
     for sid in supports.get("allIds", []):
@@ -58,11 +60,11 @@ def build(
         tip_matrix = transforms.get(s.get("objectIdTip"))
         if tip_matrix is None or not s.get("isVisible", True):
             continue
-        p0, p1, r0, r1 = segments.setdefault(s["objectIdTip"], ([], [], [], []))
+        p0, p1, r0, r1, cap0, cap1 = segments.setdefault(s["objectIdTip"], ([], [], [], [], [], []))
         centres, radii, arms_a, arms_b = joints.setdefault(s["objectIdTip"], ([], [], [], []))
 
-        def segment(a, b, ra, rb):
-            p0.append(a), p1.append(b), r0.append(ra), r1.append(rb)
+        def segment(a, b, ra, rb, cap_a=False, cap_b=False):  # caps only on exposed ends
+            p0.append(a), p1.append(b), r0.append(ra), r1.append(rb), cap0.append(cap_a), cap1.append(cap_b)
 
         def joint(point, radius, toward_a, toward_b):  # the two segments leave `point` toward a and b
             centres.append(point), radii.append(radius)
@@ -78,7 +80,7 @@ def build(
             tip_end = tip
         else:
             tip_end = tip + _unit(tip_matrix[:3, :3] @ _vec(s.get("tipNormal")), [0, 0, -1]) * tip_cfg.get("length", 3.0)
-            segment(tip, tip_end, tip_cfg.get("pointDiameter", 0.4) / 2, column_radius)
+            segment(tip, tip_end, tip_cfg.get("pointDiameter", 0.4) / 2, column_radius, cap_a=True)
 
         base_id = s.get("objectIdBase") if s.get("objectIdBase") in transforms else s.get("objectIdTip")
         if s.get("isBaseTip"):  # branch: starts on the parent support's column
@@ -99,7 +101,7 @@ def build(
             foot_radius = base_cfg.get("diameter", 6.0) / 2
         foot_top = foot + up * foot_height
         knee = foot + up * (base_cfg.get("length", 0.5) + base_cfg.get("joinLength", 0.0))
-        segment(foot, foot_top, foot_radius, join_radius)
+        segment(foot, foot_top, foot_radius, join_radius, cap_a=True)
         if np.dot(knee - foot_top, up) > 0:
             segment(foot_top, knee, join_radius, join_radius)
         else:
@@ -113,7 +115,7 @@ def build(
     for oid, segs in segments.items():
         centres, radii, arms_a, arms_b = map(np.array, joints[oid])
         meshes[oid] = Mesh.merge([
-            frustums(*map(np.array, segs), sides),
+            frustums(*map(np.array, segs[:4]), sides, cap0=segs[4], cap1=segs[5]),
             joint_spheres(centres, radii * joint_scale(sides), arms_a, arms_b, sides),
         ])
     return meshes
@@ -127,7 +129,7 @@ def joint_spheres(centres, radii, arms_a, arms_b, sides: int = SIDES) -> Mesh:
     outside of the bend.
     """
     if len(centres) == 0:
-        return Mesh(np.zeros((0, 3), np.float32), np.zeros((0, 3), np.int64))
+        return Mesh(np.zeros((0, 3), np.float32), np.zeros((0, 3), FACE_DTYPE))
     mesh = spheres(centres, radii, sides, max(2, sides // 2))
     per_sphere = len(mesh.vertices) // len(centres)
     owner = np.repeat(np.arange(len(centres)), per_sphere)
@@ -137,7 +139,7 @@ def joint_spheres(centres, radii, arms_a, arms_b, sides: int = SIDES) -> Mesh:
     in_b = np.einsum("ij,ij->i", offset, arms_b[owner]) >= tolerance
     visible = ~(in_a[mesh.faces].all(1) | in_b[mesh.faces].all(1))
     used, faces = np.unique(mesh.faces[visible], return_inverse=True)  # drop vertices no face uses any more
-    return Mesh(mesh.vertices[used], faces.reshape(-1, 3).astype(np.int64))
+    return Mesh(mesh.vertices[used], faces.reshape(-1, 3).astype(FACE_DTYPE))
 
 
 def spheres(centres, radii, sides: int = SIDES, rings: int = SIDES // 2) -> Mesh:
@@ -163,15 +165,21 @@ def spheres(centres, radii, sides: int = SIDES, rings: int = SIDES // 2) -> Mesh
 
     vertices = centres[:, None, :] + radii[:, None, None] * unit[None]
     faces = template[None] + (np.arange(len(centres)) * len(unit))[:, None, None]
-    return Mesh(vertices.reshape(-1, 3).astype(np.float32), faces.reshape(-1, 3).astype(np.int64))
+    return Mesh(vertices.reshape(-1, 3).astype(np.float32), faces.reshape(-1, 3).astype(FACE_DTYPE))
 
 
-def frustums(p0, p1, r0, r1, sides: int = SIDES) -> Mesh:
-    """Capped truncated cones from p0 (radius r0) to p1 (radius r1), vectorised over all segments."""
+def frustums(p0, p1, r0, r1, sides: int = SIDES, cap0=None, cap1=None) -> Mesh:
+    """Truncated cones from p0 (radius r0) to p1 (radius r1), vectorised over all segments.
+
+    `cap0` / `cap1` are per-segment booleans for closing each end with a disc (default: all closed).
+    """
+    cap0 = np.ones(len(p0), bool) if cap0 is None else np.asarray(cap0, bool)
+    cap1 = np.ones(len(p0), bool) if cap1 is None else np.asarray(cap1, bool)
     axis = p1 - p0
     length = np.linalg.norm(axis, axis=1)
     keep = length > 1e-6
     p0, p1, r0, r1, axis = p0[keep], p1[keep], r0[keep], r1[keep], axis[keep] / length[keep, None]
+    cap0, cap1 = cap0[keep], cap1[keep]
 
     ref = np.where(np.abs(axis[:, 2:3]) < 0.9, [0.0, 0.0, 1.0], [1.0, 0.0, 0.0])
     u = np.cross(axis, ref)
@@ -186,13 +194,13 @@ def frustums(p0, p1, r0, r1, sides: int = SIDES) -> Mesh:
 
     a = np.arange(sides)
     b = (a + 1) % sides
-    bottom_centre, top_centre = 2 * sides, 2 * sides + 1
-    template = np.concatenate([
-        np.stack([a, b, sides + b], 1),
-        np.stack([a, sides + b, sides + a], 1),
-        np.stack([np.full(sides, bottom_centre), b, a], 1),
-        np.stack([np.full(sides, top_centre), sides + a, sides + b], 1),
+    side = np.concatenate([np.stack([a, b, sides + b], 1), np.stack([a, sides + b, sides + a], 1)])
+    bottom = np.stack([np.full(sides, 2 * sides), b, a], 1)
+    top = np.stack([np.full(sides, 2 * sides + 1), sides + a, sides + b], 1)
+    start = np.arange(len(p0)) * (2 * sides + 2)  # first vertex of each segment
+    faces = np.concatenate([
+        (side[None] + start[:, None, None]).reshape(-1, 3),
+        (bottom[None] + start[cap0][:, None, None]).reshape(-1, 3),
+        (top[None] + start[cap1][:, None, None]).reshape(-1, 3),
     ])
-    per_segment = 2 * sides + 2
-    faces = template[None] + (np.arange(len(p0)) * per_segment)[:, None, None]
-    return Mesh(vertices.reshape(-1, 3).astype(np.float32), faces.reshape(-1, 3).astype(np.int64))
+    return Mesh(vertices.reshape(-1, 3).astype(np.float32), faces.astype(FACE_DTYPE))

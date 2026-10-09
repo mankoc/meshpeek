@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from ..mesh import Mesh
+from ..mesh import FACE_DTYPE, Mesh
 
 
 def load(path) -> Mesh:
@@ -19,4 +19,4 @@ def load(path) -> Mesh:
         if name in data.point_data:
             colors = np.ascontiguousarray(data.point_data[name][:, :3], dtype=np.uint8)
             break
-    return Mesh(np.asarray(data.points, dtype=np.float32), faces.astype(np.int64), colors)
+    return Mesh(np.asarray(data.points, dtype=np.float32), faces.astype(FACE_DTYPE), colors)

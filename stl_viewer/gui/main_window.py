@@ -11,7 +11,7 @@ from ..core.io import SUPPORTED_EXTENSIONS, LoadOptions, load
 from ..core.scene import Scene
 from .settings import ViewSettings, add_recent_file, clear_recent_files, recent_files
 from .settings_dialog import SettingsDialog
-from .viewport import Viewport
+from .viewport import Viewport, to_polydata
 
 CENTER_COLUMN = 1  # narrow column showing the "centred on this object" icon
 
@@ -43,7 +43,7 @@ class _LoadSignals(QObject):
 
 
 class _LoadTask(QRunnable):
-    """Parse a file off the UI thread; only the actor creation happens on the UI thread."""
+    """Parse a file and build its VTK data off the UI thread; only actor creation happens on the UI thread."""
 
     def __init__(self, path: str, options: LoadOptions):
         super().__init__()
@@ -55,10 +55,11 @@ class _LoadTask(QRunnable):
         start = time.perf_counter()
         try:
             scene = load(self.path, self.options)
+            polys = {id(obj): to_polydata(obj.mesh) for obj in scene.objects}
         except Exception as e:
             self.signals.failed.emit(self.path, str(e))
         else:
-            self.signals.done.emit(self.path, scene, time.perf_counter() - start)
+            self.signals.done.emit(self.path, (scene, polys), time.perf_counter() - start)
 
 
 class MainWindow(QMainWindow):
@@ -137,6 +138,7 @@ class MainWindow(QMainWindow):
             action(view_menu, text, slot, key)
         view_menu.addSeparator()
         action(view_menu, "&Wireframe", vp.set_wireframe, "W", checkable=True)
+        action(view_menu, "S&hadows", vp.set_shadows, "H", checkable=True)  # per session: always starts off
         view_menu.addAction(dock.toggleViewAction())
 
         settings_menu = self.menuBar().addMenu("&Settings")
@@ -171,7 +173,8 @@ class MainWindow(QMainWindow):
     def _finish_task(self, path: str):
         self._tasks = {t for t in self._tasks if t.path != path}
 
-    def _on_loaded(self, path: str, scene: Scene, seconds: float):
+    def _on_loaded(self, path: str, result: tuple[Scene, dict], seconds: float):
+        scene, polys = result
         self._finish_task(path)
         add_recent_file(path)
         self._loaded_paths.append(path)
@@ -180,7 +183,7 @@ class MainWindow(QMainWindow):
             self.viewport.add_plate(plate)
         items = {}  # id(SceneObject) -> its tree item, so children can find their parent
         for obj in scene.objects:
-            self.viewport.add_object(obj)
+            self.viewport.add_object(obj, polys[id(obj)])
             parent_item = items.get(id(obj.parent)) if obj.parent is not None else None
             item = QTreeWidgetItem(parent_item or self.object_list, [obj.name])
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)

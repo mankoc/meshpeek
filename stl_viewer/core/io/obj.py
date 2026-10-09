@@ -6,7 +6,7 @@ trip stricter readers, e.g. Blender's `usemtl` with an empty name, still load.
 
 import numpy as np
 
-from ..mesh import Mesh
+from ..mesh import FACE_DTYPE, Mesh
 
 _SPACE, _TAB, _CR, _LF, _MINUS, _ZERO, _NINE = 32, 9, 13, 10, 45, 48, 57
 
@@ -73,4 +73,4 @@ def load(path) -> Mesh:
     faces = np.concatenate(triangles)
     if faces.min() < 0 or faces.max() >= n_vertices:
         raise ValueError(f"{path}: face refers to a vertex that does not exist")
-    return Mesh(vertices, faces, colors)
+    return Mesh(vertices, faces.astype(FACE_DTYPE), colors)

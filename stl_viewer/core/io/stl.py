@@ -19,5 +19,5 @@ def load(path) -> Mesh:
         # Size check rather than the "solid" prefix: many binary STLs start with "solid" too.
         if _HEADER + n * _RECORD.itemsize == os.path.getsize(path):
             records = np.fromfile(path, dtype=_RECORD, count=n, offset=_HEADER)
-            return Mesh.triangle_soup(records["corners"])
+            return Mesh.from_corners(records["corners"])
     return vtk_formats.load(path)

@@ -8,7 +8,7 @@ import struct
 
 import numpy as np
 
-from ...mesh import Mesh
+from ...mesh import FACE_DTYPE, Mesh
 from .codec import LysFormatError
 
 HEADER_SIZE = 20
@@ -22,6 +22,6 @@ def parse(raw: bytes) -> Mesh:
         raise LysFormatError(f"unsupported mesh version {version}")
     if len(raw) != HEADER_SIZE + 4 * (n_indices + n_coords) or n_indices % 3 or n_coords % 3:
         raise LysFormatError("mesh member size does not match its header")
-    faces = np.frombuffer(raw, "<u4", n_indices, HEADER_SIZE).reshape(-1, 3).astype(np.int64)
+    faces = np.frombuffer(raw, "<u4", n_indices, HEADER_SIZE).reshape(-1, 3).astype(FACE_DTYPE)
     vertices = np.frombuffer(raw, "<f4", n_coords, HEADER_SIZE + 4 * n_indices).reshape(-1, 3).copy()
     return Mesh(vertices, faces)
