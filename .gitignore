@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Rust
+target/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db

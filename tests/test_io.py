@@ -7,9 +7,9 @@ from stl_viewer.core.io import LoadOptions, load, load_mesh
 from stl_viewer.core.io.lys import codec, loader, mesh_bin, supports
 
 ROOT = Path(__file__).resolve().parents[1]
-CUBE_LYS = ROOT / "cube.lys"
-LYD_LYS = ROOT / "Base_110mm_BodyBottom_110.lys"
-BUST_LYS = ROOT / "Favorite_BUST - Lychee.lys"
+CUBE_LYS = ROOT / "samples" / "cube.lys"
+LYD_LYS = ROOT / "samples" / "Base_110mm_BodyBottom_110.lys"
+BUST_LYS = ROOT / "samples" / "Favorite_BUST - Lychee.lys"
 
 TRIANGLE = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float32)
 
