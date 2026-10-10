@@ -39,6 +39,6 @@ Notes:
 Reproduce:
 ```
 cargo build --release -p meshpeek-tools
-target/release/meshpeek-bench [--cpu] "../samples/Favorite_BUST - Lychee.lys" ../samples/Pilone_DX.obj <benchy.stl>
+target/release/meshpeek-bench [--cpu] "samples/Favorite_BUST - Lychee.lys" samples/Pilone_DX.obj <benchy.stl>
 target/release/meshpeek-gen target/torus30m.stl 30000000 && target/release/meshpeek-bench target/torus30m.stl
 ```

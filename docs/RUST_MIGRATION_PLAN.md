@@ -13,8 +13,8 @@ Branch: `rust_migration` (from `main` @ `3d868ee`). The Python version is preser
 | 2 Renderer + viewer | Done | wgpu renderer with VTK-matching shading; runs on RTX 3070 and on WARP (`--cpu`) |
 | 3 App parity | Done | Every item of §5 implemented; interactive checks listed in `docs/manual-test.md` |
 | 4 Gizmo, large models | Done | Clickable gizmo; 30M-triangle STL at 5.9 ms/frame on GPU; chunked buffers; CPU copies freed |
-| 5 Packaging | Configured | Icon + version info in the exe; MSI (WiX) and `.deb` built by `.github/workflows/release.yml` — **not yet run** (no WiX locally; needs a push) |
-| Cut-over | Pending | Remove Python from `main` once the installers are verified |
+| 5 Packaging | Done | `scripts/build.ps1` / `scripts/build.sh` build the portable archive plus MSI / `.deb`; the manual *Build packages* GitHub workflow runs the same scripts |
+| Cut-over | Done (on `rust_migration`) | Python removed (kept on branch `python`); the Rust workspace moved from `rust/` to the repository root |
 
 Results: `docs/benchmarks.md`. Open follow-up: reduced-detail rendering while orbiting very large models in
 CPU-only mode (2 fps at 30M triangles on WARP).

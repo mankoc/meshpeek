@@ -37,7 +37,8 @@
 
         <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' />
 
-        <Icon Id='MeshPeekIcon' SourceFile='assets\icon.ico' />
+        <!-- relative to this .wxs file, so it works whatever folder the build runs from -->
+        <Icon Id='MeshPeekIcon' SourceFile='$(sys.SOURCEFILEDIR)..\assets\icon.ico' />
         <Property Id='ARPPRODUCTICON' Value='MeshPeekIcon' />
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
@@ -57,7 +58,8 @@
                         Target='[APPLICATIONFOLDER]meshpeek.exe'
                         WorkingDirectory='APPLICATIONFOLDER'
                         Icon='MeshPeekIcon' />
-                    <RegistryValue Root='HKLM' Key='Software\MeshPeek' Name='StartMenuShortcut' Type='integer' Value='1' KeyPath='yes' />
+                    <!-- shortcuts need an HKCU key path (WiX ICE38/ICE43) -->
+                    <RegistryValue Root='HKCU' Key='Software\MeshPeek' Name='StartMenuShortcut' Type='integer' Value='1' KeyPath='yes' />
                 </Component>
             </Directory>
         </Directory>

@@ -1,0 +1,68 @@
+name: Build packages
+
+# Manual only: Actions tab -> "Build packages" -> "Run workflow".
+# Builds the executables and installers with the same scripts as a local build:
+#   Windows: MeshPeek-<version>-windows-x64.zip (portable exe) + MeshPeek-<version>-x86_64.msi
+#   Linux:   MeshPeek-<version>-linux-x64.tar.gz (portable)  + meshpeek_<version>-1_amd64.deb
+# They are attached to the run as artifacts; optionally also to a draft GitHub release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Also publish a draft GitHub release (tag v<version from Cargo.toml>)"
+        type: boolean
+        default: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build zip and MSI
+        shell: pwsh
+        run: ./scripts/build.ps1 -InstallTools -SkipTests
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meshpeek-windows
+          path: dist/*
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-22.04 # older glibc: the packages also run on older distributions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build tar.gz and .deb
+        run: ./scripts/build.sh --install-tools --skip-tests
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meshpeek-linux
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    if: inputs.publish
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        id: version
+        run: echo "version=$(sed -n 's/^version *= *\"\([^\"]*\)\".*/\1/p' Cargo.toml | head -n1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: MeshPeek ${{ steps.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          draft: true
+          files: dist/*

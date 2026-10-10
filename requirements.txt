@@ -1,5 +1,0 @@
-numpy
-msgpack
-pyvista
-pyvistaqt
-PySide6

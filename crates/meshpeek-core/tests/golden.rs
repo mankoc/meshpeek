@@ -10,7 +10,7 @@ use meshpeek_core::{LoadOptions, ObjectKind, Scene, load};
 use serde_json::Value;
 
 fn samples() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../samples")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../samples")
 }
 
 fn available(path: &Path) -> bool {

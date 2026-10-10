@@ -89,7 +89,7 @@ fn renders_a_cube_over_the_background() {
 
 #[test]
 fn renders_the_bust_sample_with_supports() {
-    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../samples/Favorite_BUST - Lychee.lys");
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../samples/Favorite_BUST - Lychee.lys");
     if std::fs::read(&file).map_or(true, |b| b.starts_with(b"version https://git-lfs")) {
         eprintln!("skipping: sample not available");
         return;

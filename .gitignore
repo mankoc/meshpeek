@@ -1,11 +1,9 @@
-# Python
-__pycache__/
-*.pyc
-.venv/
-.pytest_cache/
-
-# Rust
+# Build output
 target/
+dist/
+
+# Local Python environment (icon generator only)
+.venv/
 
 # Editors / OS
 .vscode/
