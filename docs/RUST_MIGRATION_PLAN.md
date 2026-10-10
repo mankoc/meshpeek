@@ -57,7 +57,7 @@ rust/
 │   ├── meshpeek-render/           # wgpu renderer: GPU meshes, camera, pipelines, gizmo
 │   ├── meshpeek-app/              # eframe/egui application (binary: meshpeek)
 │   └── meshpeek-tools/            # binaries: lys-dump, meshpeek-bench, meshpeek-info
-└── tests/data -> ../samples        # Git LFS sample models (Phase 0)
+└── tests/data -> ../../samples     # Git LFS sample models (Phase 0)
 ```
 
 Dependency direction: `app → render → core`, `tools → core (+render for bench)`. `meshpeek-core` stays free of GPU/UI code, exactly like `stl_viewer/core` today.
