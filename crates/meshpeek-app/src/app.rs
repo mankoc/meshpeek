@@ -1,5 +1,6 @@
 //! The MeshPeek window: menus, toolbar, objects tree, 3D view, status bar and dialogs.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
@@ -11,6 +12,7 @@ use meshpeek_render::{ObjectId, Palette, Style};
 use crate::help;
 use crate::loading::{self, LoadResult};
 use crate::settings::{MATERIALS, SUPPORT_DETAIL, Settings, THEMES, material, rgb};
+use crate::sources::{self, Node};
 use crate::spacemouse::{self, Motion};
 use crate::viewport::{View, Viewport};
 
@@ -44,6 +46,15 @@ const MODEL_COLORS: [[u8; 3]; 8] = [
     [0xa0, 0xa8, 0xb4],
 ];
 
+#[derive(Clone, Copy, PartialEq)]
+enum PanelTab {
+    Objects,
+    Files,
+}
+
+/// Depth limit when listing a folder in the Files tab.
+const TREE_DEPTH: usize = 6;
+
 pub struct MeshPeekApp {
     render_state: RenderState,
     viewport: Viewport,
@@ -61,6 +72,11 @@ pub struct MeshPeekApp {
     wireframe: bool,
     show_objects: bool,
     show_toolbar: bool,
+    panel_tab: PanelTab,
+    /// Folder listed in the Files tab, with its tree and the files ticked in it.
+    browse_root: Option<PathBuf>,
+    tree: Option<Node>,
+    selected: BTreeSet<PathBuf>,
     /// Give every model its own colour instead of the preferences colour.
     color_models: bool,
     /// Entry whose information window is open.
@@ -105,6 +121,10 @@ impl MeshPeekApp {
             wireframe: false,
             show_objects: true,
             show_toolbar: true,
+            panel_tab: PanelTab::Objects,
+            browse_root: None,
+            tree: None,
+            selected: BTreeSet::new(),
             color_models: false,
             info_for: None,
             show_about: false,
@@ -121,15 +141,31 @@ impl MeshPeekApp {
 
     // --- loading -----------------------------------------------------------------------------------
 
+    /// Open files, folders (all models inside) and archives (read into memory).
     fn open_files(&mut self, ctx: &egui::Context, paths: impl IntoIterator<Item = PathBuf>) {
+        let paths: Vec<PathBuf> = paths.into_iter().collect();
+        if self.browse_root.is_none() {
+            let first = paths.first().cloned();
+            self.set_browse_root(first.map(|p| if p.is_dir() { p } else { p.parent().map(Path::to_path_buf).unwrap_or(p) }));
+        }
+        for path in &paths {
+            if !self.loaded_paths.contains(path) {
+                self.loaded_paths.push(path.clone()); // what Reload opens again
+            }
+        }
+        let mut problems = Vec::new();
+        let paths = sources::expand(paths, &mut problems);
+        if let Some(problem) = problems.first() {
+            self.status = format!("Could not open {problem}");
+        }
         if self.entries.is_empty() && self.pending == 0 {
             self.fit_until_loaded = true;
         }
-        for path in paths {
-            self.status = format!("Loading {}…", file_name(&path));
+        for source in paths {
+            self.status = format!("Loading {}…", file_name(source.path()));
             self.pending += 1;
             let device = self.render_state.device.clone();
-            loading::spawn(path, self.settings.load_options(), device, self.results.0.clone(), ctx.clone());
+            loading::spawn(source, self.settings.load_options(), device, self.results.0.clone(), ctx.clone());
         }
     }
 
@@ -181,9 +217,10 @@ impl MeshPeekApp {
             if !file.skipped.is_empty() {
                 self.status += &format!(" — {} skipped", file.skipped.len());
             }
-            self.loaded_paths.push(path.clone());
-            self.settings.add_recent(&path);
-            self.settings.save();
+            if path.exists() {
+                self.settings.add_recent(&path); // not files read from inside an archive
+                self.settings.save();
+            }
             if self.fit_until_loaded {
                 if first {
                     self.viewport.show_view(View::Isometric);
@@ -212,8 +249,28 @@ impl MeshPeekApp {
     }
 
     fn open_dialog(&mut self, ctx: &egui::Context) {
-        let picked = rfd::FileDialog::new().add_filter("3D files", SUPPORTED_EXTENSIONS).pick_files();
+        let all: Vec<&str> = [SUPPORTED_EXTENSIONS, sources::ARCHIVE_EXTENSIONS].concat();
+        let picked = rfd::FileDialog::new()
+            .add_filter("3D files and archives", &all)
+            .add_filter("3D files", SUPPORTED_EXTENSIONS)
+            .add_filter("Archives", sources::ARCHIVE_EXTENSIONS)
+            .pick_files();
         self.open_files(ctx, picked.unwrap_or_default());
+    }
+
+    fn open_folder_dialog(&mut self, ctx: &egui::Context) {
+        if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+            self.set_browse_root(Some(folder.clone()));
+            self.panel_tab = PanelTab::Files;
+            self.show_objects = true;
+            self.open_files(ctx, [folder]);
+        }
+    }
+
+    fn set_browse_root(&mut self, root: Option<PathBuf>) {
+        self.tree = root.as_deref().map(|r| sources::scan(r, TREE_DEPTH));
+        self.browse_root = root;
+        self.selected.clear();
     }
 
     // --- appearance --------------------------------------------------------------------------------
@@ -278,9 +335,8 @@ impl MeshPeekApp {
             }
         }
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
-        let supported =
-            dropped.into_iter().filter(|p| SUPPORTED_EXTENSIONS.contains(&meshpeek_core::io::extension(p).as_str()));
-        let supported: Vec<PathBuf> = supported.collect();
+        let supported: Vec<PathBuf> =
+            dropped.into_iter().filter(|p| p.is_dir() || sources::is_model(p) || sources::is_archive(p)).collect();
         if !supported.is_empty() {
             self.open_files(ctx, supported);
         }
@@ -297,6 +353,9 @@ impl MeshPeekApp {
             ui.menu_button("File", |ui| {
                 if ui.add(egui::Button::new("Open…").shortcut_text(ctx.format_shortcut(&OPEN))).clicked() {
                     self.open_dialog(&ctx);
+                }
+                if ui.button("Open folder…").clicked() {
+                    self.open_folder_dialog(&ctx);
                 }
                 ui.menu_button("Open Recent", |ui| self.recent_menu(ui, &ctx));
                 if ui.add(egui::Button::new("Clear scene").shortcut_text(ctx.format_shortcut(&CLEAR))).clicked() {
@@ -384,6 +443,9 @@ impl MeshPeekApp {
             if ui.button("📂 Open").on_hover_text("Open files (Ctrl+O)").clicked() {
                 self.open_dialog(&ui.ctx().clone());
             }
+            if ui.button("📁 Folder").on_hover_text("Open all models in a folder").clicked() {
+                self.open_folder_dialog(&ui.ctx().clone());
+            }
             if ui.button("🗑 Clear scene").on_hover_text("Remove everything (Ctrl+W)").clicked() {
                 self.clear();
             }
@@ -420,6 +482,75 @@ impl MeshPeekApp {
                 ui.label(RichText::new(format!("⚠ {reason}")).color(Color32::from_rgb(0xc0, 0x8a, 0x3e)));
             }
         });
+    }
+
+    fn files_panel(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
+        ui.horizontal(|ui| {
+            if ui.button("Folder…").clicked() {
+                self.open_folder_dialog(&ctx);
+            }
+            let can_open = !self.selected.is_empty();
+            if ui.add_enabled(can_open, egui::Button::new(format!("Open selected ({})", self.selected.len()))).clicked() {
+                let picked: Vec<PathBuf> = std::mem::take(&mut self.selected).into_iter().collect();
+                self.open_files(&ctx, picked);
+            }
+            if ui.add_enabled(self.browse_root.is_some(), egui::Button::new("⟳")).on_hover_text("Refresh").clicked() {
+                let root = self.browse_root.clone();
+                self.set_browse_root(root);
+            }
+        });
+        let Some(tree) = self.tree.take() else {
+            ui.weak("Open a folder or a file to list the models next to it.");
+            return;
+        };
+        let mut to_open = None;
+        egui::ScrollArea::both().auto_shrink(false).show(ui, |ui| {
+            if let Some(root) = &self.browse_root {
+                ui.label(RichText::new(root.display().to_string()).weak());
+            }
+            if tree.children.is_empty() {
+                ui.weak("No model files here.");
+            }
+            for child in &tree.children {
+                self.tree_node(ui, child, &mut to_open);
+            }
+        });
+        self.tree = Some(tree);
+        if let Some(path) = to_open {
+            self.selected.remove(&path);
+            self.open_files(&ctx, [path]);
+        }
+    }
+
+    fn tree_node(&mut self, ui: &mut egui::Ui, node: &Node, to_open: &mut Option<PathBuf>) {
+        let name = file_name(&node.path);
+        if node.is_dir {
+            egui::CollapsingHeader::new(format!("📁 {name}")).id_salt(&node.path).default_open(false).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if ui.small_button("Open folder").clicked() {
+                        *to_open = Some(node.path.clone());
+                    }
+                });
+                for child in &node.children {
+                    self.tree_node(ui, child, to_open);
+                }
+            });
+        } else {
+            let mut ticked = self.selected.contains(&node.path);
+            let label = if sources::is_archive(&node.path) { format!("📦 {name}") } else { name };
+            let response = ui.checkbox(&mut ticked, label).on_hover_text(node.path.display().to_string());
+            if response.changed() {
+                if ticked {
+                    self.selected.insert(node.path.clone());
+                } else {
+                    self.selected.remove(&node.path);
+                }
+            }
+            if response.double_clicked() {
+                *to_open = Some(node.path.clone());
+            }
+        }
     }
 
     fn object_row(&mut self, ui: &mut egui::Ui, index: usize, indent: f32) {
@@ -626,6 +757,7 @@ impl MeshPeekApp {
 }
 
 impl eframe::App for MeshPeekApp {
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.receive_loads();
         self.shortcuts(ctx);
@@ -646,8 +778,15 @@ impl eframe::App for MeshPeekApp {
         });
         if self.show_objects {
             egui::SidePanel::left("objects").resizable(true).default_width(230.0).show(ctx, |ui| {
-                ui.heading("Objects");
-                self.objects_panel(ui);
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.panel_tab, PanelTab::Objects, "Objects");
+                    ui.selectable_value(&mut self.panel_tab, PanelTab::Files, "Files");
+                });
+                ui.separator();
+                match self.panel_tab {
+                    PanelTab::Objects => self.objects_panel(ui),
+                    PanelTab::Files => self.files_panel(ui),
+                }
             });
         }
         egui::CentralPanel::default().frame(egui::Frame::NONE).show(ctx, |ui| {

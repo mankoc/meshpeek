@@ -1763,6 +1763,7 @@ dependencies = [
  "memory-stats",
  "meshpeek-core",
  "meshpeek-render",
+ "rayon",
  "rfd",
  "serde",
  "sevenz-rust2",

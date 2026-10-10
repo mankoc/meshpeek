@@ -10,6 +10,7 @@ mod app;
 mod help;
 mod loading;
 mod settings;
+mod sources;
 mod spacemouse;
 mod viewport;
 
@@ -29,6 +30,9 @@ fn main() -> eframe::Result {
             _ => files.push(PathBuf::from(arg)),
         }
     }
+
+    // Parsing runs on rayon threads; their default 2 MB stack overflows on big files in debug builds.
+    let _ = rayon::ThreadPoolBuilder::new().stack_size(loading::LOAD_STACK).build_global();
 
     let setup = WgpuSetupCreateNew {
         // Ask for everything the adapter offers: large buffers for big models, and line drawing for wireframe.
@@ -50,7 +54,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     let mut viewport = eframe::egui::ViewportBuilder::default()
-        .with_title("MeshPeek")
+        .with_title(concat!("MeshPeek ", env!("CARGO_PKG_VERSION")))
         .with_inner_size([1400.0, 900.0])
         .with_drag_and_drop(true);
     if let Ok(icon) = image::load_from_memory(include_bytes!("../assets/icon.png")) {

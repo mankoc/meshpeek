@@ -12,8 +12,12 @@ use crate::io::{fan, line_chunks, map_file};
 use crate::mesh::Mesh;
 
 pub fn load(path: &Path) -> Result<Mesh> {
-    let data = map_file(path)?;
-    parse(&data).map_err(|e| LoadError::format(format!("{}: {e}", path.display())))
+    load_bytes(&map_file(path)?, path)
+}
+
+/// Parse file contents already in memory; `path` only names the file in error messages.
+pub fn load_bytes(data: &[u8], path: &Path) -> Result<Mesh> {
+    parse(data).map_err(|e| LoadError::format(format!("{}: {e}", path.display())))
 }
 
 /// What one chunk of lines contributed: its vertices and its faces, with indices not yet resolved.

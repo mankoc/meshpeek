@@ -2,33 +2,33 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-
-use memmap2::Mmap;
+use std::io::{Cursor, Read};
 
 use crate::error::{LoadError, Result};
-use crate::io::map_file;
+use crate::io::Data;
 
 const ZIP_MAGIC: &[u8] = b"PK\x03\x04";
 
 pub enum Archive {
-    Zip(zip::ZipArchive<File>),
-    /// Memory-mapped MNGO file and its members: name -> (absolute offset, size).
-    Mngo(Mmap, HashMap<String, (usize, usize)>),
+    Zip(zip::ZipArchive<Cursor<Data>>),
+    /// MNGO file contents and its members: name -> (absolute offset, size).
+    Mngo(Data, HashMap<String, (usize, usize)>),
 }
 
 impl Archive {
-    pub fn open(path: &Path) -> Result<Self> {
-        let map = map_file(path)?;
-        if map.starts_with(ZIP_MAGIC) {
-            let file = File::open(path).map_err(|e| LoadError::io(path, e))?;
-            let zip = zip::ZipArchive::new(file).map_err(|e| LoadError::format(format!("bad ZIP archive: {e}")))?;
+    /// Open a file from disk (memory-mapped).
+    pub fn open_path(path: &std::path::Path) -> Result<Self> {
+        Self::open(Data::Mapped(crate::io::map_file(path)?))
+    }
+
+    pub fn open(data: Data) -> Result<Self> {
+        if data.starts_with(ZIP_MAGIC) {
+            let zip = zip::ZipArchive::new(Cursor::new(data))
+                .map_err(|e| LoadError::format(format!("bad ZIP archive: {e}")))?;
             return Ok(Self::Zip(zip));
         }
-        let members = mngo_index(&map)?;
-        Ok(Self::Mngo(map, members))
+        let members = mngo_index(&data)?;
+        Ok(Self::Mngo(data, members))
     }
 
     pub fn is_zip(&self) -> bool {

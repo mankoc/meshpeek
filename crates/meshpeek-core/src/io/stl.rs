@@ -12,8 +12,12 @@ const HEADER: usize = 84; // 80-byte comment + u32 triangle count
 const RECORD: usize = 50; // normal, 3 corners (12 floats), u16 attribute
 
 pub fn load(path: &Path) -> Result<Mesh> {
-    let data = map_file(path)?;
-    let corners = if is_binary(&data) { binary_corners(&data) } else { ascii_corners(&data, path)? };
+    load_bytes(&map_file(path)?, path)
+}
+
+/// Parse file contents already in memory; `path` only names the file in error messages.
+pub fn load_bytes(data: &[u8], path: &Path) -> Result<Mesh> {
+    let corners = if is_binary(data) { binary_corners(data) } else { ascii_corners(data, path)? };
     if corners.is_empty() {
         return Err(LoadError::format(format!("{}: no triangles found", path.display())));
     }
@@ -21,19 +25,11 @@ pub fn load(path: &Path) -> Result<Mesh> {
 }
 
 /// The 80-byte header comment of a binary STL (or the name after `solid` in an ASCII one), if it says anything.
-pub fn comment(path: &Path) -> Option<String> {
-    use std::io::Read;
-    let mut head = Vec::new();
-    std::fs::File::open(path).ok()?.take(HEADER as u64).read_to_end(&mut head).ok()?;
-    let text = if head.len() >= HEADER && is_binary_header(path, &head) { &head[..80] } else { &head[..head.len().min(80)] };
-    let text: String = String::from_utf8_lossy(text).chars().filter(|c| !c.is_control()).collect();
+pub fn comment(data: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(&data[..data.len().min(80)]);
+    let text: String = text.chars().filter(|c| !c.is_control()).collect();
     let text = text.trim().trim_start_matches("solid").trim().to_string();
     (!text.is_empty()).then_some(text)
-}
-
-fn is_binary_header(path: &Path, head: &[u8]) -> bool {
-    let n = u32::from_le_bytes(head[80..84].try_into().unwrap()) as u64;
-    std::fs::metadata(path).is_ok_and(|m| m.len() == HEADER as u64 + n * RECORD as u64)
 }
 
 /// Size check rather than the "solid" prefix: many binary STLs start with "solid" too.

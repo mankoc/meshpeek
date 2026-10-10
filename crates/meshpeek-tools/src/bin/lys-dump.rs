@@ -21,7 +21,7 @@ fn main() {
 }
 
 fn run(path: &Path, key: Option<&str>) -> meshpeek_core::Result<()> {
-    let mut archive = Archive::open(path)?;
+    let mut archive = Archive::open_path(path)?;
     println!("container: {}", if archive.is_zip() { "ZIP (V1)" } else { "MNGO (V2+)" });
     for name in archive.names() {
         let size = archive.read(&name)?.len();

@@ -10,6 +10,7 @@ use super::container::Archive;
 use super::value::{self, get, ids, index, path, str_of, vec3};
 use super::{codec, mesh_bin, supports};
 use crate::error::{LoadError, Result};
+use crate::io::{Data, map_file};
 use crate::mesh::Mesh;
 use crate::scene::{ObjectKind, Plate, Scene, SceneObject};
 
@@ -71,7 +72,12 @@ fn object_mesh(archive: &mut Archive, obj: &Value) -> std::result::Result<Mesh, 
 }
 
 pub fn load(file: &Path, support_sides: u32) -> Result<Scene> {
-    let mut archive = Archive::open(file)?;
+    load_data(file, Data::Mapped(map_file(file)?), support_sides)
+}
+
+/// Like [`load`] for contents already in memory; `file` only labels the objects.
+pub fn load_data(file: &Path, data: Data, support_sides: u32) -> Result<Scene> {
+    let mut archive = Archive::open(data)?;
     if !archive.contains("scene.bin") {
         return Err(LoadError::format("scene.bin missing from archive"));
     }

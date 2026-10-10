@@ -46,28 +46,62 @@ pub fn extension(path: &Path) -> String {
     path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default()
 }
 
-/// Load a single-mesh file (STL, OBJ, PLY).
-pub fn load_mesh(path: &Path) -> Result<Mesh> {
-    match extension(path).as_str() {
-        "stl" => stl::load(path),
-        "obj" => obj::load(path),
-        "ply" => ply::load(path),
+/// File contents: memory-mapped from disk or owned (unpacked from an archive).
+pub enum Data {
+    Mapped(Mmap),
+    Owned(Vec<u8>),
+}
+
+impl std::ops::Deref for Data {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        match self {
+            Self::Mapped(map) => map,
+            Self::Owned(bytes) => bytes,
+        }
+    }
+}
+
+impl AsRef<[u8]> for Data {
+    fn as_ref(&self) -> &[u8] {
+        self
+    }
+}
+
+/// Parse a single-mesh file (STL, OBJ, PLY) from memory; `name` picks the format and names the file in errors.
+pub fn parse_mesh(name: &Path, data: &[u8]) -> Result<Mesh> {
+    match extension(name).as_str() {
+        "stl" => stl::load_bytes(data, name),
+        "obj" => obj::load_bytes(data, name),
+        "ply" => ply::load_bytes(data, name),
         other => Err(LoadError::Unsupported(format!(".{other}"))),
     }
 }
 
+/// Load a single-mesh file (STL, OBJ, PLY).
+pub fn load_mesh(path: &Path) -> Result<Mesh> {
+    parse_mesh(path, &map_file(path)?)
+}
+
 /// Load any supported file. Single meshes keep their file coordinates, apart from the OBJ up-axis fix.
 pub fn load(path: &Path, options: &LoadOptions) -> Result<Scene> {
-    let ext = extension(path);
+    load_data(path, Data::Mapped(map_file(path)?), options)
+}
+
+/// Like [`load`] for a file whose contents are already in memory (e.g. unpacked from an archive);
+/// `name` is only used to pick the format and to label the result.
+pub fn load_data(name: &Path, data: Data, options: &LoadOptions) -> Result<Scene> {
+    let ext = extension(name);
+    let size = data.len() as u64;
     let mut scene = if ext == "lys" {
-        lys::load(path, options.support_sides)?
+        lys::load_data(name, data, options.support_sides)?
     } else {
-        let mut object = SceneObject::new(stem(path), load_mesh(path)?, path);
+        let mut object = SceneObject::new(stem(name), parse_mesh(name, &data)?, name);
         if ext == "obj" && options.obj_y_up {
             object.transform = Y_UP_TO_Z_UP;
         }
         if ext == "stl" {
-            if let Some(comment) = stl::comment(path) {
+            if let Some(comment) = stl::comment(&data) {
                 object.info.push(("Comment".into(), comment));
             }
         }
@@ -77,20 +111,12 @@ pub fn load(path: &Path, options: &LoadOptions) -> Result<Scene> {
         "lys" => "Lychee scene (.lys)".to_string(),
         other => format!("{} file", other.to_uppercase()),
     };
-    let size = std::fs::metadata(path).map(|m| format_size(m.len())).unwrap_or_default();
+    let size = format_size(size);
     for object in &mut scene.objects {
         object.info.insert(0, ("Format".into(), format.clone()));
         object.info.insert(1, ("File size".into(), size.clone()));
     }
     Ok(scene)
-}
-
-fn format_size(bytes: u64) -> String {
-    match bytes {
-        b if b >= 1 << 20 => format!("{:.1} MB", b as f64 / (1u64 << 20) as f64),
-        b if b >= 1 << 10 => format!("{:.1} KB", b as f64 / 1024.0),
-        b => format!("{b} bytes"),
-    }
 }
 
 pub(crate) fn stem(path: &Path) -> String {
@@ -109,6 +135,14 @@ pub(crate) fn map_file(path: &Path) -> Result<Mmap> {
 }
 
 /// Split `data` into about `parts` slices that end on line boundaries (for parallel parsing).
+fn format_size(bytes: u64) -> String {
+    match bytes {
+        b if b >= 1 << 20 => format!("{:.1} MB", b as f64 / (1u64 << 20) as f64),
+        b if b >= 1 << 10 => format!("{:.1} KB", b as f64 / 1024.0),
+        b => format!("{b} bytes"),
+    }
+}
+
 pub(crate) fn line_chunks(data: &[u8], parts: usize) -> Vec<&[u8]> {
     let target = (data.len() / parts.max(1)).max(1 << 16);
     let mut chunks = Vec::new();

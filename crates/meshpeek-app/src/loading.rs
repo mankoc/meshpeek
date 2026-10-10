@@ -8,8 +8,14 @@ use std::time::Instant;
 
 use eframe::egui;
 use glam::DMat4;
+use meshpeek_core::io::{Data, load_data};
 use meshpeek_core::{LoadOptions, ObjectKind, Plate, load};
+
+use crate::sources::Source;
 use meshpeek_render::{GpuMesh, wgpu};
+
+/// Stack size of loader and parser threads.
+pub const LOAD_STACK: usize = 64 << 20;
 
 /// One object of a loaded file, ready to be added to the renderer.
 pub struct LoadedObject {
@@ -35,10 +41,21 @@ pub struct LoadResult {
 }
 
 /// Load `path` on a new thread; the result is sent on `done` and `ctx` is asked to repaint.
-pub fn spawn(path: PathBuf, options: LoadOptions, device: wgpu::Device, done: Sender<LoadResult>, ctx: egui::Context) {
-    std::thread::spawn(move || {
+pub fn spawn(source: Source, options: LoadOptions, device: wgpu::Device, done: Sender<LoadResult>, ctx: egui::Context) {
+    // Big stack: dozens of loads can run at once (e.g. from an archive) and debug builds use a lot of it.
+    let spawned = std::thread::Builder::new().stack_size(LOAD_STACK).spawn(move || {
         let start = Instant::now();
-        let result = load(&path, &options).map_err(|e| e.to_string()).map(|scene| {
+        let (path, loaded) = match source {
+            Source::Disk(path) => {
+                let scene = load(&path, &options);
+                (path, scene)
+            }
+            Source::Memory { name, data } => {
+                let scene = load_data(&name, Data::Owned(data), &options);
+                (name, scene)
+            }
+        };
+        let result = loaded.map_err(|e| e.to_string()).map(|scene| {
             let max_buffer = device.limits().max_buffer_size;
             let objects = scene
                 .objects
@@ -58,4 +75,7 @@ pub fn spawn(path: PathBuf, options: LoadOptions, device: wgpu::Device, done: Se
         let _ = done.send(LoadResult { path, result, seconds: start.elapsed().as_secs_f64() });
         ctx.request_repaint();
     });
+    if let Err(e) = spawned {
+        log::error!("could not start loader thread: {e}");
+    }
 }

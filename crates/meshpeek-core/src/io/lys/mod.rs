@@ -7,4 +7,4 @@ pub mod mesh_bin;
 pub mod supports;
 pub mod value;
 
-pub use loader::load;
+pub use loader::{load, load_data};
