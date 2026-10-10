@@ -23,6 +23,8 @@ jobs:
 
   build:
     needs: check-tag
+    permissions:
+      contents: write # the reused workflow has an optional publish job that asks for it
     uses: ./.github/workflows/build-packages.yml
 
   release:
