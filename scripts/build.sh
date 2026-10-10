@@ -58,7 +58,7 @@ step "Packaging portable tar.gz"
 name="MeshPeek-$version-linux-x64"
 stage="dist/$name"
 rm -rf "$stage" && mkdir -p "$stage"
-cp target/release/meshpeek target/release/THIRD-PARTY-LICENSES.html LICENSE README.md LYS_FILE_FORMAT.md \
+cp target/release/meshpeek target/release/THIRD-PARTY-LICENSES.html LICENSE README.md \
     crates/meshpeek-app/assets/icon.png \
     crates/meshpeek-app/assets/meshpeek.desktop "$stage/"
 tar -C dist -czf "dist/$name.tar.gz" "$name"

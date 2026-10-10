@@ -83,7 +83,7 @@ $Name = "MeshPeek-$Version-windows-x64"
 $Stage = Join-Path $Dist $Name
 Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $Stage | Out-Null
-Copy-Item target\release\meshpeek.exe, target\release\THIRD-PARTY-LICENSES.html, LICENSE, README.md, LYS_FILE_FORMAT.md $Stage
+Copy-Item target\release\meshpeek.exe, target\release\THIRD-PARTY-LICENSES.html, LICENSE, README.md $Stage
 Compress-Archive -Path "$Stage\*" -DestinationPath "$Dist\$Name.zip" -Force
 Remove-Item -Recurse -Force $Stage
 Write-Host "    $Dist\$Name.zip"
