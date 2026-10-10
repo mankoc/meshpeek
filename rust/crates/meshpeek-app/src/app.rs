@@ -45,6 +45,9 @@ pub struct MeshPeekApp {
     snapshot: Option<(PathBuf, u32)>,
 }
 
+/// Extra indent of a model's supports under it in the objects tree.
+const CHILD_INDENT: f32 = 16.0;
+
 const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
 const CLEAR: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
 const PREFERENCES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
@@ -323,12 +326,12 @@ impl MeshPeekApp {
                 let children: Vec<usize> =
                     (0..self.entries.len()).filter(|&c| self.entries[c].parent == Some(index)).collect();
                 if children.is_empty() {
-                    self.object_row(ui, index);
+                    self.object_row(ui, index, 0.0);
                 } else {
                     let id = ui.make_persistent_id(("object", self.entries[index].id));
                     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
-                        .show_header(ui, |ui| self.object_row(ui, index))
-                        .body(|ui| children.iter().for_each(|&c| self.object_row(ui, c)));
+                        .show_header(ui, |ui| self.object_row(ui, index, 0.0))
+                        .body(|ui| children.iter().for_each(|&c| self.object_row(ui, c, CHILD_INDENT)));
                 }
             }
             for reason in &self.skipped {
@@ -337,12 +340,20 @@ impl MeshPeekApp {
         });
     }
 
-    fn object_row(&mut self, ui: &mut egui::Ui, index: usize) {
+    fn object_row(&mut self, ui: &mut egui::Ui, index: usize, indent: f32) {
         ui.horizontal(|ui| {
+            ui.add_space(indent);
             let entry = &mut self.entries[index];
             if ui.checkbox(&mut entry.visible, "").changed() {
-                self.viewport.renderer.set_visible(entry.id, entry.visible);
+                let (id, visible) = (entry.id, entry.visible);
+                self.viewport.renderer.set_visible(id, visible);
+                // A model's checkbox also shows/hides what belongs to it (its supports).
+                for child in self.entries.iter_mut().filter(|e| e.parent == Some(index)) {
+                    child.visible = visible;
+                    self.viewport.renderer.set_visible(child.id, visible);
+                }
             }
+            let entry = &self.entries[index];
             let tooltip = format!("{}\n{} triangles", entry.source.display(), thousands(entry.triangles));
             let label = ui.add(egui::Label::new(&entry.name).sense(egui::Sense::click())).on_hover_text(tooltip);
             let id = entry.id;
