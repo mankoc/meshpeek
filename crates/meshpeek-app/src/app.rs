@@ -681,19 +681,22 @@ impl MeshPeekApp {
     fn tree_node(&mut self, ui: &mut egui::Ui, node: &Node, to_open: &mut Option<PathBuf>) {
         let name = file_name(&node.path);
         if node.is_dir {
-            egui::CollapsingHeader::new(format!("📁 {name}")).id_salt(&node.path).default_open(false).show(ui, |ui| {
-                if node.path.is_dir() {
-                    // a real folder (not a folder inside an archive)
-                    ui.horizontal(|ui| {
-                        if ui.small_button("Open folder").clicked() {
-                            *to_open = Some(node.path.clone());
-                        }
-                    });
-                }
-                for child in &node.children {
-                    self.tree_node(ui, child, to_open);
-                }
-            });
+            egui::CollapsingHeader::new(format!("📁 {name}"))
+                .id_salt((self.archive_models.is_some(), &node.path)) // own state: archive folders start open
+                .default_open(self.archive_models.is_some())
+                .show(ui, |ui| {
+                    if node.path.is_dir() {
+                        // a real folder (not a folder inside an archive)
+                        ui.horizontal(|ui| {
+                            if ui.small_button("Open folder").clicked() {
+                                *to_open = Some(node.path.clone());
+                            }
+                        });
+                    }
+                    for child in &node.children {
+                        self.tree_node(ui, child, to_open);
+                    }
+                });
         } else {
             let mut ticked = self.selected.contains(&node.path);
             let label = if sources::is_archive(&node.path) { format!("📦 {name}") } else { name };
