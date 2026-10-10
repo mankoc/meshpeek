@@ -180,7 +180,9 @@ impl MeshPeekApp {
         let paths: Vec<PathBuf> = paths.into_iter().collect();
         if self.browse_root.is_none() {
             let first = paths.first().cloned();
-            self.set_browse_root(first.map(|p| if p.is_dir() { p } else { p.parent().map(Path::to_path_buf).unwrap_or(p) }));
+            self.set_browse_root(
+                first.map(|p| if p.is_dir() { p } else { p.parent().map(Path::to_path_buf).unwrap_or(p) }),
+            );
         }
         for path in &paths {
             if !self.loaded_paths.contains(path) {
@@ -557,7 +559,8 @@ impl MeshPeekApp {
                 self.open_folder_dialog(&ctx);
             }
             let can_open = !self.selected.is_empty();
-            if ui.add_enabled(can_open, egui::Button::new(format!("Open selected ({})", self.selected.len()))).clicked() {
+            if ui.add_enabled(can_open, egui::Button::new(format!("Open selected ({})", self.selected.len()))).clicked()
+            {
                 let picked: Vec<PathBuf> = std::mem::take(&mut self.selected).into_iter().collect();
                 self.open_files(&ctx, picked);
             }
@@ -640,7 +643,8 @@ impl MeshPeekApp {
                 let id = entry.id;
                 let centred = self.viewport.focus == Some(id);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let info = ui.add(egui::Button::new("ℹ").small().frame(false)).on_hover_text("Show model information");
+                    let info =
+                        ui.add(egui::Button::new("ℹ").small().frame(false)).on_hover_text("Show model information");
                     if info.clicked() {
                         self.info_for = if self.info_for == Some(index) { None } else { Some(index) };
                     }
@@ -840,7 +844,6 @@ impl MeshPeekApp {
 }
 
 impl eframe::App for MeshPeekApp {
-
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.receive_loads();
         self.shortcuts(ctx);
@@ -1017,7 +1020,13 @@ fn focus_icon(ui: &mut egui::Ui, centred: bool) -> egui::Response {
 }
 
 /// Toolbar button: the coloured icon centred above its label (or the icon alone); `on` draws it pressed in.
-fn tool_button(ui: &mut egui::Ui, icon: &egui::TextureHandle, label: &str, show_text: bool, on: bool) -> egui::Response {
+fn tool_button(
+    ui: &mut egui::Ui,
+    icon: &egui::TextureHandle,
+    label: &str,
+    show_text: bool,
+    on: bool,
+) -> egui::Response {
     const ICON: f32 = 28.0;
     const PAD: f32 = 5.0;
     let font = egui::FontId::proportional(11.0);

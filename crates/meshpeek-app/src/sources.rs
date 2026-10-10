@@ -22,7 +22,10 @@ pub fn is_model(path: &Path) -> bool {
 pub enum Source {
     Disk(PathBuf),
     /// A file unpacked from an archive; `name` is `<archive>/<path inside>`.
-    Memory { name: PathBuf, data: Vec<u8> },
+    Memory {
+        name: PathBuf,
+        data: Vec<u8>,
+    },
 }
 
 impl Source {
