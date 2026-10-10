@@ -2,19 +2,27 @@
 
     python make_icon.py    # writes icon.png and icon.ico next to this script
 
-A shaded isometric cube with a light mesh pattern and an orange support column, on a dark rounded tile.
+A faceted low-poly hexagon in teal, lit from the top left, with an orange vertex dot, on a dark rounded tile.
 """
 
+import math
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
 HERE = Path(__file__).resolve().parent
 S = 1024  # draw large, downsample for smooth edges
+ORANGE = (232, 162, 74)
+TEAL = (96, 190, 214)
 
 
-def lerp(a, b, t):
-    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+def point(cx, cy, r, deg):
+    a = math.radians(deg)
+    return (cx + r * math.cos(a), cy + r * math.sin(a))
+
+
+def shade(color, k):
+    return tuple(max(0, min(255, int(v * k))) for v in color) + (255,)
 
 
 def main():
@@ -22,32 +30,28 @@ def main():
     d = ImageDraw.Draw(img)
     d.rounded_rectangle((40, 40, S - 40, S - 40), radius=190, fill=(43, 46, 52, 255))
 
-    cx, cy, r = S / 2, S / 2 - 70, 300  # isometric cube
-    top, left, right = (cx, cy - r), (cx - r * 0.87, cy - r / 2), (cx + r * 0.87, cy - r / 2)
-    centre = (cx, cy)
-    bottom, bottom_left, bottom_right = (cx, cy + r), (cx - r * 0.87, cy + r / 2), (cx + r * 0.87, cy + r / 2)
-
-    # orange support column under the cube, with a foot
-    d.polygon([(cx - 22, cy + r - 10), (cx + 22, cy + r - 10), (cx + 22, S - 175), (cx - 22, S - 175)], fill=(232, 162, 74, 255))
-    d.ellipse((cx - 85, S - 205, cx + 85, S - 150), fill=(232, 162, 74, 255))
-
-    faces = [
-        ([top, right, centre, left], (205, 213, 225)),  # top face, lit
-        ([left, centre, bottom, bottom_left], (150, 160, 175)),
-        ([centre, right, bottom_right, bottom], (112, 121, 136)),
+    cx, cy, radius = S / 2, S / 2, 330
+    outer = [point(cx, cy, radius, -90 + 60 * i) for i in range(6)]
+    inner = [point(cx, cy, radius * 0.52, -60 + 120 * i) for i in range(3)]
+    # (triangle, brightness): facets facing the light are brighter
+    facets = [
+        ([outer[0], outer[1], inner[0]], 1.25),
+        ([outer[1], outer[2], inner[0]], 1.0),
+        ([outer[2], outer[3], inner[1]], 0.78),
+        ([outer[3], outer[4], inner[1]], 0.62),
+        ([outer[4], outer[5], inner[2]], 0.9),
+        ([outer[5], outer[0], inner[2]], 1.12),
+        ([inner[0], inner[1], inner[2]], 1.05),
+        ([outer[2], inner[1], inner[0]], 0.88),
+        ([outer[4], inner[2], inner[1]], 0.72),
+        ([outer[0], inner[0], inner[2]], 1.18),
     ]
-    for polygon, color in faces:
-        d.polygon(polygon, fill=color + (255,))
-    # mesh pattern: a few triangle edges on each face
-    line = (80, 88, 102, 255)
-    for polygon, _ in faces:
-        a, b, c, e = polygon
-        for t in (1 / 3, 2 / 3):
-            d.line([lerp(a, b, t), lerp(e, c, t)], fill=line, width=7)
-            d.line([lerp(a, e, t), lerp(b, c, t)], fill=line, width=7)
-        d.line([a, c], fill=line, width=7)
-    for polygon, _ in faces:
-        d.line(polygon + [polygon[0]], fill=(60, 66, 78, 255), width=12, joint="curve")
+    for polygon, k in facets:
+        d.polygon(polygon, fill=shade(TEAL, k))
+    for polygon, _ in facets:
+        d.line(polygon + [polygon[0]], fill=(30, 56, 66, 255), width=8, joint="curve")
+    x, y = inner[0]
+    d.ellipse((x - 34, y - 34, x + 34, y + 34), fill=ORANGE + (255,))
 
     big = img.resize((256, 256), Image.LANCZOS)
     big.save(HERE / "icon.png")

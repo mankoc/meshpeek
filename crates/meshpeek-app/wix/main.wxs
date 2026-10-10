@@ -68,13 +68,45 @@
                     <RegistryValue Root='HKCU' Key='Software\MeshPeek' Name='StartMenuShortcut' Type='integer' Value='1' KeyPath='yes' />
                 </Component>
             </Directory>
+            <Directory Id='SendToFolder'>
+                <Component Id='SendToShortcut' Guid='5D0C8B7E-7A55-4E5F-9C61-3B2F5D7A1E42'>
+                    <Shortcut
+                        Id='MeshPeekSendTo'
+                        Name='MeshPeek'
+                        Description='Open with MeshPeek'
+                        Target='[APPLICATIONFOLDER]meshpeek.exe'
+                        WorkingDirectory='APPLICATIONFOLDER'
+                        Icon='MeshPeekIcon' />
+                    <RegistryValue Root='HKCU' Key='Software\MeshPeek' Name='SendToShortcut' Type='integer' Value='1' KeyPath='yes' />
+                </Component>
+            </Directory>
         </Directory>
+
+        <!-- Makes MeshPeek appear in "Open with" for these types. It does not touch the default program;
+             that is chosen in Windows (Preferences > "Default apps…" opens the right settings page). -->
+        <DirectoryRef Id='APPLICATIONFOLDER'>
+            <Component Id='OpenWith' Guid='9A3E41C2-6B0D-4F7A-8E15-C2D94B7F0A36'>
+                <RegistryValue Root='HKLM' Key='Software\Classes\MeshPeek.Model' Type='string' Value='3D model' KeyPath='yes' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\MeshPeek.Model\DefaultIcon' Type='string' Value='[APPLICATIONFOLDER]meshpeek.exe,0' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\MeshPeek.Model\shell\open' Name='FriendlyAppName' Type='string' Value='MeshPeek' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\MeshPeek.Model\shell\open\command' Type='string' Value='"[APPLICATIONFOLDER]meshpeek.exe" "%1"' />
+                    <RegistryValue Root='HKLM' Key='Software\Classes\.stl\OpenWithProgids' Name='MeshPeek.Model' Type='string' Value='' />
+                    <RegistryValue Root='HKLM' Key='Software\Classes\.obj\OpenWithProgids' Name='MeshPeek.Model' Type='string' Value='' />
+                    <RegistryValue Root='HKLM' Key='Software\Classes\.ply\OpenWithProgids' Name='MeshPeek.Model' Type='string' Value='' />
+                    <RegistryValue Root='HKLM' Key='Software\Classes\.lys\OpenWithProgids' Name='MeshPeek.Model' Type='string' Value='' />
+            </Component>
+        </DirectoryRef>
 
         <Feature Id='Application' Title='MeshPeek' Level='1' ConfigurableDirectory='APPLICATIONFOLDER'>
             <ComponentRef Id='Executable' />
             <ComponentRef Id='License' />
             <ComponentRef Id='ThirdPartyLicenses' />
             <ComponentRef Id='StartMenuShortcut' />
+            <ComponentRef Id='OpenWith' />
+        </Feature>
+
+        <Feature Id='SendTo' Title='"Send to" menu entry' Level='1'>
+            <ComponentRef Id='SendToShortcut' />
         </Feature>
     </Product>
 </Wix>

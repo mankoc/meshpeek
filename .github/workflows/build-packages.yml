@@ -5,8 +5,10 @@ name: Build packages
 #   Windows: MeshPeek-<version>-windows-x64.zip (portable exe) + MeshPeek-<version>-x86_64.msi
 #   Linux:   MeshPeek-<version>-linux-x64.tar.gz (portable)  + meshpeek_<version>-1_amd64.deb
 # They are attached to the run as artifacts; optionally also to a draft GitHub release.
+# release.yml reuses this workflow (workflow_call) when a version tag is pushed.
 
 on:
+  workflow_call:
   workflow_dispatch:
     inputs:
       publish:

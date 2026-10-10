@@ -1,9 +1,7 @@
 # Things to implement
 
 ## Not code related
-3 - Suggest new icons for filetype and application
-4 - Add send to meshpeek option on windows on installer
-11- Installer must register meshpeek as a program that opens stl, obj, lys (do not change the default association, just make sure that the app appears on the list of open with.  Add an option on configuration to make it the default for the different filetypes)
+3 - Suggest an icon for the file types (STL, OBJ, PLY, LYS); the application icon is done
 
 ## Open checks
 

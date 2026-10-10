@@ -26,6 +26,7 @@ pub const CONTROLS: &[(&str, &[(&str, &str)])] = &[
             ("3 / 4", "Left / right view"),
             ("5 / 6", "Top / bottom view"),
             ("W", "Wireframe on / off"),
+            ("H", "Hide all objects / show them again"),
         ],
     ),
     (

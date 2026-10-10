@@ -55,7 +55,37 @@ enum PanelTab {
 /// Depth limit when listing a folder in the Files tab.
 const TREE_DEPTH: usize = 6;
 
+/// Coloured toolbar icons (PNG files in assets/toolbar, made by make_toolbar_icons.py).
+struct ToolIcons {
+    open: egui::TextureHandle,
+    folder: egui::TextureHandle,
+    clear: egui::TextureHandle,
+    objects: egui::TextureHandle,
+    eye: egui::TextureHandle,
+    colours: egui::TextureHandle,
+}
+
+impl ToolIcons {
+    fn load(ctx: &egui::Context) -> Self {
+        let texture = |name: &str, png: &[u8]| {
+            let image = image::load_from_memory(png).expect("toolbar icon").to_rgba8();
+            let size = [image.width() as usize, image.height() as usize];
+            let image = egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw());
+            ctx.load_texture(name, image, egui::TextureOptions::LINEAR)
+        };
+        Self {
+            open: texture("open", include_bytes!("../assets/toolbar/open.png")),
+            folder: texture("folder", include_bytes!("../assets/toolbar/folder.png")),
+            clear: texture("clear", include_bytes!("../assets/toolbar/clear.png")),
+            objects: texture("objects", include_bytes!("../assets/toolbar/objects.png")),
+            eye: texture("eye", include_bytes!("../assets/toolbar/eye.png")),
+            colours: texture("colours", include_bytes!("../assets/toolbar/colours.png")),
+        }
+    }
+}
+
 pub struct MeshPeekApp {
+    tool_icons: ToolIcons,
     render_state: RenderState,
     viewport: Viewport,
     settings: Settings,
@@ -107,6 +137,7 @@ impl MeshPeekApp {
         let adapter = format!("{} ({:?}, {:?})", info.name, info.backend, info.device_type);
         log::info!("rendering with {adapter}");
         let mut app = Self {
+            tool_icons: ToolIcons::load(&cc.egui_ctx),
             viewport: Viewport::new(&render_state),
             render_state,
             settings: Settings::load(),
@@ -326,6 +357,9 @@ impl MeshPeekApp {
         if pressed(Key::F) {
             self.viewport.fit_all();
         }
+        if pressed(Key::H) {
+            self.toggle_all_visible();
+        }
         if pressed(Key::W) {
             self.set_wireframe(!self.wireframe);
         }
@@ -388,6 +422,9 @@ impl MeshPeekApp {
                 }
                 ui.checkbox(&mut self.show_objects, "Objects panel");
                 ui.checkbox(&mut self.show_toolbar, "Button bar");
+                if ui.add(egui::Button::new("Hide / show all objects").shortcut_text("H")).clicked() {
+                    self.toggle_all_visible();
+                }
                 let mut colored = self.color_models;
                 if ui.checkbox(&mut colored, "Colour each model").changed() {
                     self.set_color_models(colored);
@@ -433,32 +470,58 @@ impl MeshPeekApp {
         }
     }
 
+    /// Hide everything, or show everything again when nothing is visible.
+    fn toggle_all_visible(&mut self) {
+        let show = !self.entries.iter().any(|e| e.visible);
+        for entry in &mut self.entries {
+            entry.visible = show;
+            self.viewport.renderer.set_visible(entry.id, show);
+        }
+    }
+
     fn set_color_models(&mut self, on: bool) {
         self.color_models = on;
         self.apply_styles(&self.settings.clone());
     }
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
+        let text = self.draft.as_ref().unwrap_or(&self.settings).toolbar_text; // Preferences previews live
+        let ctx = ui.ctx().clone();
+        let icons = &self.tool_icons;
+        let (open, folder, clear, objects, eye, colours) =
+            (&icons.open, &icons.folder, &icons.clear, &icons.objects, &icons.eye, &icons.colours);
+        let (show_objects, color_models) = (self.show_objects, self.color_models);
+        let button = |ui: &mut egui::Ui, icon: &egui::TextureHandle, label: &str, on: bool, hint: &str| {
+            tool_button(ui, icon, label, text, on).on_hover_text(hint).clicked()
+        };
+        let mut clicked = [false; 6];
         ui.horizontal(|ui| {
-            if ui.button("📂 Open").on_hover_text("Open files (Ctrl+O)").clicked() {
-                self.open_dialog(&ui.ctx().clone());
-            }
-            if ui.button("📁 Folder").on_hover_text("Open all models in a folder").clicked() {
-                self.open_folder_dialog(&ui.ctx().clone());
-            }
-            if ui.button("🗑 Clear scene").on_hover_text("Remove everything (Ctrl+W)").clicked() {
-                self.clear();
-            }
+            clicked[0] = button(ui, open, "Open", false, "Open files (Ctrl+O)");
+            clicked[1] = button(ui, folder, "Folder", false, "Open all models in a folder");
+            clicked[2] = button(ui, clear, "Clear", false, "Clear scene: remove everything (Ctrl+W)");
             ui.separator();
-            if ui.selectable_label(self.show_objects, "📋 Objects").on_hover_text("Show/hide the objects panel").clicked()
-            {
-                self.show_objects = !self.show_objects;
-            }
-            let hint = "Give every model its own colour";
-            if ui.selectable_label(self.color_models, "🎨 Colours").on_hover_text(hint).clicked() {
-                self.set_color_models(!self.color_models);
-            }
+            clicked[3] = button(ui, objects, "Objects", show_objects, "Show/hide the objects panel");
+            clicked[4] = button(ui, eye, "Hide all", false, "Hide or show all objects (H)");
+            clicked[5] = button(ui, colours, "Colours", color_models, "Give every model its own colour");
         });
+        if clicked[0] {
+            self.open_dialog(&ctx);
+        }
+        if clicked[1] {
+            self.open_folder_dialog(&ctx);
+        }
+        if clicked[2] {
+            self.clear();
+        }
+        if clicked[3] {
+            self.show_objects = !self.show_objects;
+        }
+        if clicked[4] {
+            self.toggle_all_visible();
+        }
+        if clicked[5] {
+            self.set_color_models(!self.color_models);
+        }
     }
 
     fn objects_panel(&mut self, ui: &mut egui::Ui) {
@@ -629,12 +692,23 @@ impl MeshPeekApp {
                 ui.checkbox(&mut draft.obj_y_up, "Y is up (Blender, Maya, ZBrush)")
                     .on_hover_text("Rotate OBJ files so their Y axis points up. Applied by reloading open files.");
                 ui.end_row();
+                ui.label("Button bar:");
+                ui.checkbox(&mut draft.toolbar_text, "Show text under the icons");
+                ui.end_row();
                 ui.label("Theme:");
                 combo(ui, "theme", &mut draft.theme, &THEMES);
                 ui.end_row();
                 ui.label("LYS files:");
                 ui.checkbox(&mut draft.show_plate, "Show build plate");
                 ui.end_row();
+                if cfg!(windows) {
+                    ui.label("File types:");
+                    let hint = "Windows decides which program opens STL, OBJ, PLY and LYS files: pick MeshPeek there";
+                    if ui.button("Make default app…").on_hover_text(hint).clicked() {
+                        open_default_apps_settings();
+                    }
+                    ui.end_row();
+                }
                 ui.label("Space mouse:");
                 ui.checkbox(&mut draft.space_mouse.enabled, "Enabled");
                 ui.end_row();
@@ -931,6 +1005,55 @@ fn focus_icon(ui: &mut egui::Ui, centred: bool) -> egui::Response {
         painter.line_segment([c + d * (r + 0.5), c + d * (r + 3.5)], stroke);
     }
     response
+}
+
+/// Toolbar button: the coloured icon centred above its label (or the icon alone); `on` draws it pressed in.
+fn tool_button(ui: &mut egui::Ui, icon: &egui::TextureHandle, label: &str, show_text: bool, on: bool) -> egui::Response {
+    const ICON: f32 = 28.0;
+    const PAD: f32 = 5.0;
+    let font = egui::FontId::proportional(11.0);
+    let color = ui.visuals().text_color();
+    let galley = show_text.then(|| ui.painter().layout_no_wrap(label.to_string(), font, color));
+    let text_size = galley.as_ref().map_or(egui::Vec2::ZERO, |g| g.size());
+    let width = (ICON.max(text_size.x) + 2.0 * PAD).max(if show_text { 52.0 } else { 0.0 });
+    let height = ICON + 2.0 * PAD + if show_text { text_size.y + 2.0 } else { 0.0 };
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
+    if ui.is_rect_visible(rect) {
+        let visuals = ui.visuals();
+        let fill = if on {
+            visuals.selection.bg_fill
+        } else if response.is_pointer_button_down_on() {
+            visuals.widgets.active.bg_fill
+        } else if response.hovered() {
+            visuals.widgets.hovered.bg_fill
+        } else {
+            Color32::TRANSPARENT
+        };
+        let painter = ui.painter();
+        painter.rect_filled(rect, 4.0, fill);
+        let icon_rect = egui::Rect::from_center_size(
+            egui::pos2(rect.center().x, rect.top() + PAD + ICON / 2.0),
+            egui::vec2(ICON, ICON),
+        );
+        painter.image(
+            icon.id(),
+            icon_rect,
+            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+            Color32::WHITE,
+        );
+        if let Some(galley) = galley {
+            let at = egui::pos2(rect.center().x - galley.size().x / 2.0, icon_rect.bottom() + 2.0);
+            painter.galley(at, galley, color);
+        }
+    }
+    response
+}
+
+/// Windows does not let programs set file associations themselves; open its "Default apps" page instead.
+fn open_default_apps_settings() {
+    if let Err(e) = std::process::Command::new("explorer.exe").arg("ms-settings:defaultapps").spawn() {
+        log::warn!("could not open the Default apps settings: {e}");
+    }
 }
 
 /// The third-party notices file next to the executable (zip, MSI) or in /usr/share/doc (Linux package).

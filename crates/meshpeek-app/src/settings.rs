@@ -54,6 +54,8 @@ pub struct Settings {
     pub theme: String,
     /// Draw the build plate of `.lys` files.
     pub show_plate: bool,
+    /// Toolbar buttons show a text label under their icon.
+    pub toolbar_text: bool,
     pub space_mouse: SpaceMouseSettings,
     pub recent_files: Vec<PathBuf>,
 }
@@ -69,6 +71,7 @@ impl Default for Settings {
             obj_y_up: true,
             theme: "System".into(),
             show_plate: true,
+            toolbar_text: true,
             space_mouse: SpaceMouseSettings::default(),
             recent_files: Vec::new(),
         }
