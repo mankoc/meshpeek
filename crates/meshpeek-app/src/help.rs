@@ -16,7 +16,7 @@ pub const CONTROLS: &[(&str, &[(&str, &str)])] = &[
     (
         "Keyboard: view",
         &[
-            ("← → ↑ ↓", "Orbit (hold)"),
+            ("Ctrl + arrows", "Orbit (hold)"),
             ("Shift + arrows", "Pan (hold)"),
             ("+ / −, Page Up / Page Down", "Zoom (hold)"),
             ("Q / E", "Roll (hold)"),
@@ -32,6 +32,7 @@ pub const CONTROLS: &[(&str, &[(&str, &str)])] = &[
     (
         "Keyboard: files and windows",
         &[
+            ("← / →", "Previous / next model file in the same folder (opened alone)"),
             ("Ctrl + O", "Open files"),
             ("Ctrl + W", "Clear the scene"),
             ("Ctrl + ,", "Preferences"),

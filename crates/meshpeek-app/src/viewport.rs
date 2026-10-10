@@ -97,14 +97,14 @@ impl Viewport {
         self.frame_target();
     }
 
-    /// Keyboard navigation while keys are held: arrows orbit, Shift+arrows pan, +/- or Page Up/Down zoom,
-    /// Q/E roll. Speeds are per second, so the frame rate does not matter. Returns true while moving.
+    /// Keyboard navigation while keys are held: Ctrl+arrows orbit, Shift+arrows pan, +/- or Page Up/Down zoom,
+    /// Q/E roll (plain arrows are not used here: left/right step through the files of a folder). Speeds are per second, so the frame rate does not matter. Returns true while moving.
     pub fn keyboard(&mut self, ctx: &egui::Context) -> bool {
         if ctx.wants_keyboard_input() {
             return false; // typing in a text field
         }
         use egui::Key;
-        let (dt, shift, command, down) = ctx.input(|i| {
+        let (dt, shift, ctrl, alt, down) = ctx.input(|i| {
             let keys = [
                 Key::ArrowLeft,
                 Key::ArrowRight,
@@ -121,12 +121,16 @@ impl Viewport {
             (
                 i.stable_dt.min(0.1) as f64,
                 i.modifiers.shift,
-                i.modifiers.command || i.modifiers.alt,
+                i.modifiers.command,
+                i.modifiers.alt,
                 keys.map(|k| i.key_down(k)),
             )
         });
-        let [left, right, up, down_arrow, plus, equals, page_up, minus, page_down, q, e] = down;
-        if command || !down.iter().any(|&d| d) {
+        let [mut left, mut right, mut up, mut down_arrow, plus, equals, page_up, minus, page_down, q, e] = down;
+        if !(ctrl || shift) {
+            (left, right, up, down_arrow) = (false, false, false, false); // plain arrows browse files instead
+        }
+        if alt || ![left, right, up, down_arrow, plus, equals, page_up, minus, page_down, q, e].contains(&true) {
             return false;
         }
         let horizontal = (left as i32 - right as i32) as f64; // +1 = like dragging left

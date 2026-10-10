@@ -109,6 +109,8 @@ pub struct MeshPeekApp {
     /// Folder listed in the Files tab, with its tree and the files ticked in it.
     browse_root: Option<PathBuf>,
     tree: Option<Node>,
+    /// Model entries of the archive listed in the Files tab (sorted), if it lists one.
+    archive_models: Option<(PathBuf, Vec<String>)>,
     selected: BTreeSet<PathBuf>,
     /// Give every model its own colour instead of the preferences colour.
     color_models: bool,
@@ -158,6 +160,7 @@ impl MeshPeekApp {
             panel_tab: PanelTab::Objects,
             browse_root: None,
             tree: None,
+            archive_models: None,
             selected: BTreeSet::new(),
             color_models: false,
             info_for: None,
@@ -175,14 +178,25 @@ impl MeshPeekApp {
 
     // --- loading -----------------------------------------------------------------------------------
 
-    /// Open files, folders (all models inside) and archives (read into memory).
+    /// Open files and folders (all models inside). An archive lists its models in the Files tab like a folder
+    /// and opens only the first one; the others open from there (or with the arrow keys).
     fn open_files(&mut self, ctx: &egui::Context, paths: impl IntoIterator<Item = PathBuf>) {
-        let paths: Vec<PathBuf> = paths.into_iter().collect();
-        if self.browse_root.is_none() {
-            let first = paths.first().cloned();
-            self.set_browse_root(
-                first.map(|p| if p.is_dir() { p } else { p.parent().map(Path::to_path_buf).unwrap_or(p) }),
-            );
+        let mut paths: Vec<PathBuf> = paths.into_iter().collect();
+        for path in &mut paths {
+            if path.is_file() && sources::is_archive(path) {
+                let archive = path.clone();
+                match self.set_browse_root(Some(archive.clone())).ok().and_then(|_| self.first_model(&archive)) {
+                    Some(first) => *path = first,
+                    None => self.status = format!("Could not open {}: no model files inside", archive.display()),
+                }
+            }
+        }
+        if let Some(first) = paths.first() {
+            let inside = self.browse_root.as_ref().is_some_and(|root| first.starts_with(root));
+            if !inside {
+                let root = if first.is_dir() { Some(first.clone()) } else { first.parent().map(Path::to_path_buf) };
+                let _ = self.set_browse_root(root);
+            }
         }
         for path in &paths {
             if !self.loaded_paths.contains(path) {
@@ -284,6 +298,44 @@ impl MeshPeekApp {
         self.open_files(ctx, paths);
     }
 
+    /// Open the previous (`-1`) or next (`1`) model file of the current file's folder, alone in the scene.
+    fn step_file(&mut self, ctx: &egui::Context, step: isize) {
+        if self.pending > 0 {
+            return; // still loading: the old scene would reappear
+        }
+        let Some(current) = self.loaded_paths.last().cloned() else { return };
+        let key = |p: &Path| p.to_string_lossy().replace('\\', "/").to_lowercase(); // whole path: names can repeat in sub-folders
+        let mut files: Vec<PathBuf> = if let Some((archive, _)) = sources::archive_of(&current) {
+            // a model inside an archive: its neighbours are the archive's other models
+            let entries = match &self.archive_models {
+                Some((listed, entries)) if *listed == archive => entries.clone(),
+                _ => sources::list_models(&archive).unwrap_or_default(),
+            };
+            entries.iter().map(|e| archive.join(e)).collect()
+        } else if current.is_file() && sources::is_model(&current) {
+            let Some(folder) = current.parent() else { return };
+            let mut files: Vec<PathBuf> = std::fs::read_dir(folder)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.is_file() && sources::is_model(p))
+                .collect();
+            files.sort_by_key(|p| key(p));
+            files
+        } else {
+            return;
+        };
+        let Some(index) = files.iter().position(|p| key(p) == key(&current)) else { return };
+        if files.len() < 2 {
+            return;
+        }
+        let next = (index as isize + step).rem_euclid(files.len() as isize) as usize;
+        let path = files.swap_remove(next);
+        self.clear();
+        self.open_files(ctx, [path]);
+    }
+
     fn open_dialog(&mut self, ctx: &egui::Context) {
         let all: Vec<&str> = [SUPPORTED_EXTENSIONS, sources::ARCHIVE_EXTENSIONS].concat();
         let picked = rfd::FileDialog::new()
@@ -296,17 +348,45 @@ impl MeshPeekApp {
 
     fn open_folder_dialog(&mut self, ctx: &egui::Context) {
         if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-            self.set_browse_root(Some(folder.clone()));
+            let _ = self.set_browse_root(Some(folder.clone()));
             self.panel_tab = PanelTab::Files;
             self.show_objects = true;
             self.open_files(ctx, [folder]);
         }
     }
 
-    fn set_browse_root(&mut self, root: Option<PathBuf>) {
-        self.tree = root.as_deref().map(|r| sources::scan(r, TREE_DEPTH));
-        self.browse_root = root;
+    /// List a folder, or the models of an archive, in the Files tab.
+    fn set_browse_root(&mut self, root: Option<PathBuf>) -> Result<(), String> {
         self.selected.clear();
+        self.archive_models = None;
+        let mut result = Ok(());
+        self.tree = match root.as_deref() {
+            Some(r) if r.is_file() && sources::is_archive(r) => match sources::list_models(r) {
+                Ok(entries) => {
+                    let tree = sources::archive_tree(r, &entries);
+                    self.archive_models = Some((r.to_path_buf(), entries));
+                    Some(tree)
+                }
+                Err(e) => {
+                    self.status = format!("Could not open {}: {e}", r.display());
+                    result = Err(e);
+                    None
+                }
+            },
+            Some(r) => Some(sources::scan(r, TREE_DEPTH)),
+            None => None,
+        };
+        self.browse_root = root;
+        self.panel_tab = if self.archive_models.is_some() { PanelTab::Files } else { self.panel_tab };
+        result
+    }
+
+    /// Virtual path of the first model of the archive listed in the Files tab.
+    fn first_model(&self, archive: &Path) -> Option<PathBuf> {
+        match &self.archive_models {
+            Some((listed, entries)) if listed == archive => entries.first().map(|e| archive.join(e)),
+            _ => None,
+        }
     }
 
     // --- appearance --------------------------------------------------------------------------------
@@ -361,6 +441,12 @@ impl MeshPeekApp {
         }
         if pressed(Key::F) {
             self.viewport.fit_all();
+        }
+        if pressed(Key::ArrowLeft) {
+            self.step_file(ctx, -1);
+        }
+        if pressed(Key::ArrowRight) {
+            self.step_file(ctx, 1);
         }
         if pressed(Key::H) {
             self.toggle_all_visible();
@@ -566,7 +652,7 @@ impl MeshPeekApp {
             }
             if ui.add_enabled(self.browse_root.is_some(), egui::Button::new("⟳")).on_hover_text("Refresh").clicked() {
                 let root = self.browse_root.clone();
-                self.set_browse_root(root);
+                let _ = self.set_browse_root(root);
             }
         });
         let Some(tree) = self.tree.take() else {
@@ -596,11 +682,14 @@ impl MeshPeekApp {
         let name = file_name(&node.path);
         if node.is_dir {
             egui::CollapsingHeader::new(format!("📁 {name}")).id_salt(&node.path).default_open(false).show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    if ui.small_button("Open folder").clicked() {
-                        *to_open = Some(node.path.clone());
-                    }
-                });
+                if node.path.is_dir() {
+                    // a real folder (not a folder inside an archive)
+                    ui.horizontal(|ui| {
+                        if ui.small_button("Open folder").clicked() {
+                            *to_open = Some(node.path.clone());
+                        }
+                    });
+                }
                 for child in &node.children {
                     self.tree_node(ui, child, to_open);
                 }
