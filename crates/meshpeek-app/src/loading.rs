@@ -18,6 +18,7 @@ pub struct LoadedObject {
     pub parent: Option<usize>, // index within the same file
     pub visible: bool,
     pub transform: DMat4,
+    pub info: Vec<(String, String)>,
     pub mesh: Arc<GpuMesh>,
 }
 
@@ -49,6 +50,7 @@ pub fn spawn(path: PathBuf, options: LoadOptions, device: wgpu::Device, done: Se
                     parent: obj.parent,
                     visible: obj.visible,
                     transform: obj.transform,
+                    info: obj.info,
                 })
                 .collect();
             LoadedFile { objects, plates: scene.plates, skipped: scene.skipped }

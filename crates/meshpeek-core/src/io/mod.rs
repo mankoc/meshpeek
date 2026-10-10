@@ -59,14 +59,38 @@ pub fn load_mesh(path: &Path) -> Result<Mesh> {
 /// Load any supported file. Single meshes keep their file coordinates, apart from the OBJ up-axis fix.
 pub fn load(path: &Path, options: &LoadOptions) -> Result<Scene> {
     let ext = extension(path);
-    if ext == "lys" {
-        return lys::load(path, options.support_sides);
+    let mut scene = if ext == "lys" {
+        lys::load(path, options.support_sides)?
+    } else {
+        let mut object = SceneObject::new(stem(path), load_mesh(path)?, path);
+        if ext == "obj" && options.obj_y_up {
+            object.transform = Y_UP_TO_Z_UP;
+        }
+        if ext == "stl" {
+            if let Some(comment) = stl::comment(path) {
+                object.info.push(("Comment".into(), comment));
+            }
+        }
+        Scene { objects: vec![object], ..Scene::default() }
+    };
+    let format = match ext.as_str() {
+        "lys" => "Lychee scene (.lys)".to_string(),
+        other => format!("{} file", other.to_uppercase()),
+    };
+    let size = std::fs::metadata(path).map(|m| format_size(m.len())).unwrap_or_default();
+    for object in &mut scene.objects {
+        object.info.insert(0, ("Format".into(), format.clone()));
+        object.info.insert(1, ("File size".into(), size.clone()));
     }
-    let mut object = SceneObject::new(stem(path), load_mesh(path)?, path);
-    if ext == "obj" && options.obj_y_up {
-        object.transform = Y_UP_TO_Z_UP;
+    Ok(scene)
+}
+
+fn format_size(bytes: u64) -> String {
+    match bytes {
+        b if b >= 1 << 20 => format!("{:.1} MB", b as f64 / (1u64 << 20) as f64),
+        b if b >= 1 << 10 => format!("{:.1} KB", b as f64 / 1024.0),
+        b => format!("{b} bytes"),
     }
-    Ok(Scene { objects: vec![object], ..Scene::default() })
 }
 
 pub(crate) fn stem(path: &Path) -> String {

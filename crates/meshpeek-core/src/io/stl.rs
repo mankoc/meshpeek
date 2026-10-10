@@ -20,6 +20,22 @@ pub fn load(path: &Path) -> Result<Mesh> {
     Ok(Mesh::from_corners(&corners))
 }
 
+/// The 80-byte header comment of a binary STL (or the name after `solid` in an ASCII one), if it says anything.
+pub fn comment(path: &Path) -> Option<String> {
+    use std::io::Read;
+    let mut head = Vec::new();
+    std::fs::File::open(path).ok()?.take(HEADER as u64).read_to_end(&mut head).ok()?;
+    let text = if head.len() >= HEADER && is_binary_header(path, &head) { &head[..80] } else { &head[..head.len().min(80)] };
+    let text: String = String::from_utf8_lossy(text).chars().filter(|c| !c.is_control()).collect();
+    let text = text.trim().trim_start_matches("solid").trim().to_string();
+    (!text.is_empty()).then_some(text)
+}
+
+fn is_binary_header(path: &Path, head: &[u8]) -> bool {
+    let n = u32::from_le_bytes(head[80..84].try_into().unwrap()) as u64;
+    std::fs::metadata(path).is_ok_and(|m| m.len() == HEADER as u64 + n * RECORD as u64)
+}
+
 /// Size check rather than the "solid" prefix: many binary STLs start with "solid" too.
 fn is_binary(data: &[u8]) -> bool {
     data.len() >= HEADER && {

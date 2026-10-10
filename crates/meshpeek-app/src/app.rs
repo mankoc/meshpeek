@@ -29,7 +29,20 @@ struct Entry {
     visible: bool,
     source: PathBuf,
     triangles: usize,
+    info: Vec<(String, String)>,
 }
+
+/// Colours handed out to the models in turn by "Colour each model".
+const MODEL_COLORS: [[u8; 3]; 8] = [
+    [0x4e, 0x9a, 0xe6],
+    [0xe6, 0x6a, 0x4e],
+    [0x5c, 0xc2, 0x7a],
+    [0xe6, 0xc2, 0x4e],
+    [0xb0, 0x6a, 0xe6],
+    [0x4e, 0xd6, 0xd6],
+    [0xe6, 0x6a, 0xb0],
+    [0xa0, 0xa8, 0xb4],
+];
 
 pub struct MeshPeekApp {
     render_state: RenderState,
@@ -47,6 +60,11 @@ pub struct MeshPeekApp {
     status: String,
     wireframe: bool,
     show_objects: bool,
+    show_toolbar: bool,
+    /// Give every model its own colour instead of the preferences colour.
+    color_models: bool,
+    /// Entry whose information window is open.
+    info_for: Option<usize>,
     show_about: bool,
     show_controls: bool,
     show_guide: bool,
@@ -86,6 +104,9 @@ impl MeshPeekApp {
             status: "Open or drop STL, OBJ, PLY or LYS files".into(),
             wireframe: false,
             show_objects: true,
+            show_toolbar: true,
+            color_models: false,
+            info_for: None,
             show_about: false,
             show_controls: false,
             show_guide: false,
@@ -129,7 +150,7 @@ impl MeshPeekApp {
                 self.viewport.renderer.add_plate(*plate);
             }
             for obj in file.objects {
-                let style = self.style(obj.kind, &self.settings);
+                let style = self.style(obj.kind, self.model_count(), &self.settings);
                 let (kind, triangles) = (obj.kind, obj.mesh.triangles);
                 let id = self.viewport.renderer.add_object(
                     &self.render_state.device,
@@ -146,6 +167,7 @@ impl MeshPeekApp {
                     visible: obj.visible,
                     source: path.clone(),
                     triangles,
+                    info: obj.info,
                 });
             }
             self.skipped.extend(file.skipped.iter().cloned());
@@ -178,6 +200,7 @@ impl MeshPeekApp {
         self.viewport.renderer.clear();
         self.viewport.focus = None;
         self.entries.clear();
+        self.info_for = None;
         self.skipped.clear();
         self.loaded_paths.clear();
     }
@@ -195,17 +218,28 @@ impl MeshPeekApp {
 
     // --- appearance --------------------------------------------------------------------------------
 
-    fn style(&self, kind: ObjectKind, settings: &Settings) -> Style {
-        let (color, name) = match kind {
+    /// Number of models (not supports) in the scene so far.
+    fn model_count(&self) -> usize {
+        self.entries.iter().filter(|e| e.kind == ObjectKind::Model).count()
+    }
+
+    /// Style for an object; `ordinal` is its position among the models (picks its colour when colouring each).
+    fn style(&self, kind: ObjectKind, ordinal: usize, settings: &Settings) -> Style {
+        let (mut color, name) = match kind {
             ObjectKind::Support => (settings.support_color, &settings.support_material),
             ObjectKind::Model => (settings.model_color, &settings.model_material),
         };
+        if self.color_models && kind == ObjectKind::Model {
+            color = MODEL_COLORS[ordinal % MODEL_COLORS.len()];
+        }
         Style { color: rgb(color), material: material(name).unwrap_or(MATERIALS[1].1) }
     }
 
     fn apply_styles(&mut self, settings: &Settings) {
+        let mut models = 0;
         for entry in &self.entries {
-            let style = self.style(entry.kind, settings);
+            let style = self.style(entry.kind, models, settings);
+            models += (entry.kind == ObjectKind::Model) as usize;
             self.viewport.renderer.set_style(&self.render_state.queue, entry.id, style);
         }
     }
@@ -229,6 +263,9 @@ impl MeshPeekApp {
             return; // typing in a text field
         }
         let pressed = |key| ctx.input(|i| i.key_pressed(key) && i.modifiers.is_none());
+        if pressed(Key::Escape) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         if pressed(Key::F) {
             self.viewport.fit_all();
         }
@@ -265,6 +302,10 @@ impl MeshPeekApp {
                 if ui.add(egui::Button::new("Clear scene").shortcut_text(ctx.format_shortcut(&CLEAR))).clicked() {
                     self.clear();
                 }
+                if ui.add(egui::Button::new("Preferences…").shortcut_text(ctx.format_shortcut(&PREFERENCES))).clicked()
+                {
+                    self.draft = Some(self.settings.clone());
+                }
                 ui.separator();
                 if ui.button("Exit").clicked() {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -287,21 +328,10 @@ impl MeshPeekApp {
                     self.set_wireframe(wireframe);
                 }
                 ui.checkbox(&mut self.show_objects, "Objects panel");
-                ui.separator();
-                ui.menu_button("Theme", |ui| {
-                    for theme in THEMES {
-                        if ui.radio(self.settings.theme == theme, theme).clicked() {
-                            self.settings.theme = theme.to_string();
-                            self.settings.save();
-                            ui.close();
-                        }
-                    }
-                });
-            });
-            ui.menu_button("Settings", |ui| {
-                if ui.add(egui::Button::new("Preferences…").shortcut_text(ctx.format_shortcut(&PREFERENCES))).clicked()
-                {
-                    self.draft = Some(self.settings.clone());
+                ui.checkbox(&mut self.show_toolbar, "Button bar");
+                let mut colored = self.color_models;
+                if ui.checkbox(&mut colored, "Colour each model").changed() {
+                    self.set_color_models(colored);
                 }
             });
             ui.menu_button("Help", |ui| {
@@ -344,6 +374,11 @@ impl MeshPeekApp {
         }
     }
 
+    fn set_color_models(&mut self, on: bool) {
+        self.color_models = on;
+        self.apply_styles(&self.settings.clone());
+    }
+
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             if ui.button("📂 Open").on_hover_text("Open files (Ctrl+O)").clicked() {
@@ -351,6 +386,15 @@ impl MeshPeekApp {
             }
             if ui.button("🗑 Clear scene").on_hover_text("Remove everything (Ctrl+W)").clicked() {
                 self.clear();
+            }
+            ui.separator();
+            if ui.selectable_label(self.show_objects, "📋 Objects").on_hover_text("Show/hide the objects panel").clicked()
+            {
+                self.show_objects = !self.show_objects;
+            }
+            let hint = "Give every model its own colour";
+            if ui.selectable_label(self.color_models, "🎨 Colours").on_hover_text(hint).clicked() {
+                self.set_color_models(!self.color_models);
             }
         });
     }
@@ -399,6 +443,10 @@ impl MeshPeekApp {
                 let id = entry.id;
                 let centred = self.viewport.focus == Some(id);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let info = ui.add(egui::Button::new("ℹ").small().frame(false)).on_hover_text("Show model information");
+                    if info.clicked() {
+                        self.info_for = if self.info_for == Some(index) { None } else { Some(index) };
+                    }
                     let hint = if centred {
                         "Centred on this model: rotation pivots around it. Click to show the whole scene again."
                     } else {
@@ -450,6 +498,12 @@ impl MeshPeekApp {
                 ui.checkbox(&mut draft.obj_y_up, "Y is up (Blender, Maya, ZBrush)")
                     .on_hover_text("Rotate OBJ files so their Y axis points up. Applied by reloading open files.");
                 ui.end_row();
+                ui.label("Theme:");
+                combo(ui, "theme", &mut draft.theme, &THEMES);
+                ui.end_row();
+                ui.label("LYS files:");
+                ui.checkbox(&mut draft.show_plate, "Show build plate");
+                ui.end_row();
                 ui.label("Space mouse:");
                 ui.checkbox(&mut draft.space_mouse.enabled, "Enabled");
                 ui.end_row();
@@ -495,6 +549,51 @@ impl MeshPeekApp {
         }
     }
 
+    fn info_window(&mut self, ctx: &egui::Context) {
+        let Some(index) = self.info_for else { return };
+        let Some(entry) = self.entries.get(index) else {
+            self.info_for = None;
+            return;
+        };
+        let supports: usize = self.entries.iter().filter(|e| e.parent == Some(index)).map(|e| e.triangles).sum();
+        let size = self.viewport.renderer.object_bounds(entry.id).map(|(lo, hi)| hi - lo);
+        let mut open = true;
+        egui::Window::new(format!("Information: {}", entry.name)).collapsible(false).open(&mut open).show(ctx, |ui| {
+            egui::Grid::new("model info").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                ui.label("Path:");
+                ui.label(entry.source.display().to_string());
+                ui.end_row();
+                ui.label("Triangles:");
+                ui.label(thousands(entry.triangles));
+                ui.end_row();
+                if supports > 0 {
+                    ui.label("Support triangles:");
+                    ui.label(thousands(supports));
+                    ui.end_row();
+                }
+                if let Some(s) = size {
+                    ui.label("Width (X):");
+                    ui.label(format!("{:.2} mm", s.x));
+                    ui.end_row();
+                    ui.label("Depth (Y):");
+                    ui.label(format!("{:.2} mm", s.y));
+                    ui.end_row();
+                    ui.label("Height (Z):");
+                    ui.label(format!("{:.2} mm", s.z));
+                    ui.end_row();
+                }
+                for (label, value) in &entry.info {
+                    ui.label(format!("{label}:"));
+                    ui.label(value);
+                    ui.end_row();
+                }
+            });
+        });
+        if !open {
+            self.info_for = None;
+        }
+    }
+
     fn about_window(&mut self, ctx: &egui::Context) {
         egui::Window::new("About MeshPeek").collapsible(false).resizable(false).open(&mut self.show_about).show(
             ctx,
@@ -534,7 +633,9 @@ impl eframe::App for MeshPeekApp {
         self.navigate(ctx);
 
         egui::TopBottomPanel::top("menu").show(ctx, |ui| self.menu_bar(ui));
-        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| self.toolbar(ui));
+        if self.show_toolbar {
+            egui::TopBottomPanel::top("toolbar").show(ctx, |ui| self.toolbar(ui));
+        }
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if self.pending > 0 {
@@ -554,6 +655,7 @@ impl eframe::App for MeshPeekApp {
             self.viewport.ui(ui, &render_state);
         });
         self.preferences_window(ctx);
+        self.info_window(ctx);
         self.about_window(ctx);
         help::controls_window(ctx, &mut self.show_controls);
         help::guide_window(ctx, &mut self.show_guide);
@@ -564,7 +666,9 @@ impl eframe::App for MeshPeekApp {
 impl MeshPeekApp {
     /// Follow the theme setting in the UI and in the 3D view.
     fn apply_theme(&mut self, ctx: &egui::Context) {
-        let preference = match self.settings.theme.as_str() {
+        let settings = self.draft.as_ref().unwrap_or(&self.settings); // Preferences previews live
+        self.viewport.renderer.set_show_plates(settings.show_plate);
+        let preference = match settings.theme.as_str() {
             "Light" => egui::ThemePreference::Light,
             "Dark" => egui::ThemePreference::Dark,
             _ => egui::ThemePreference::System,

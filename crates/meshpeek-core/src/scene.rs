@@ -21,6 +21,8 @@ pub struct SceneObject {
     pub source: PathBuf,
     /// Index into [`Scene::objects`] of the object this one belongs to (e.g. a model's supports).
     pub parent: Option<usize>,
+    /// Extra facts about the source file (format, size, comment…) as label/value pairs.
+    pub info: Vec<(String, String)>,
 }
 
 impl SceneObject {
@@ -33,6 +35,7 @@ impl SceneObject {
             visible: true,
             source: source.into(),
             parent: None,
+            info: Vec::new(),
         }
     }
 }

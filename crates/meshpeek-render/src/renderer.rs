@@ -116,6 +116,7 @@ pub struct Renderer {
     objects: Vec<(ObjectId, Object)>,
     next_id: u64,
     plates: Vec<Plate>,
+    show_plates: bool,
     lines: Option<(wgpu::Buffer, u32)>,
     floor: Option<(wgpu::Buffer, u32)>,
     overlays_dirty: bool,
@@ -167,6 +168,7 @@ impl Renderer {
             objects: Vec::new(),
             next_id: 0,
             plates: Vec::new(),
+            show_plates: true,
             lines: None,
             floor: None,
             overlays_dirty: true,
@@ -272,6 +274,15 @@ impl Renderer {
         }
     }
 
+    /// Show or hide the build plates (floor and outline); the origin axes stay.
+    pub fn set_show_plates(&mut self, show: bool) {
+        if self.show_plates != show {
+            self.show_plates = show;
+            self.overlays_dirty = true;
+            self.dirty = true;
+        }
+    }
+
     /// World-space bounds of one object.
     pub fn object_bounds(&self, id: ObjectId) -> Option<(DVec3, DVec3)> {
         let (_, object) = self.objects.iter().find(|(i, _)| *i == id)?;
@@ -281,7 +292,7 @@ impl Renderer {
     /// World-space bounds of all visible objects and plates.
     pub fn scene_bounds(&self) -> Option<(DVec3, DVec3)> {
         let boxes = self.objects.iter().filter(|(_, o)| o.visible).filter_map(|(_, o)| world_bounds(o));
-        let plates = self.plates.iter().map(plate_box);
+        let plates = self.plates.iter().filter(|_| self.show_plates).map(plate_box);
         boxes.chain(plates).reduce(|(a0, a1), (b0, b1)| (a0.min(b0), a1.max(b1)))
     }
 
@@ -413,7 +424,7 @@ impl Renderer {
         self.overlays_dirty = false;
         let mut lines = Vec::new();
         let mut floor = Vec::new();
-        for plate in &self.plates {
+        for plate in self.plates.iter().filter(|_| self.show_plates) {
             let (lo, hi) = plate_box(plate);
             let outline = self.palette.plate_outline;
             let corner = |i: usize| {

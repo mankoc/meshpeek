@@ -52,6 +52,8 @@ pub struct Settings {
     /// Blender, Maya and ZBrush export OBJ with Y up.
     pub obj_y_up: bool,
     pub theme: String,
+    /// Draw the build plate of `.lys` files.
+    pub show_plate: bool,
     pub space_mouse: SpaceMouseSettings,
     pub recent_files: Vec<PathBuf>,
 }
@@ -66,6 +68,7 @@ impl Default for Settings {
             support_detail: "Medium".into(),
             obj_y_up: true,
             theme: "System".into(),
+            show_plate: true,
             space_mouse: SpaceMouseSettings::default(),
             recent_files: Vec::new(),
         }
