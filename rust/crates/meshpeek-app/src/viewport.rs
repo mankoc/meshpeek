@@ -123,6 +123,72 @@ impl Viewport {
             let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
             ui.painter().image(texture, rect, uv, egui::Color32::WHITE);
         }
+        self.gizmo(ui, rect);
+    }
+
+    /// Orientation gizmo in the top-right corner: the axes turn with the camera; clicking an axis end looks
+    /// along that axis (same as the standard views).
+    fn gizmo(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
+        const RADIUS: f32 = 36.0;
+        let centre = egui::pos2(rect.right() - RADIUS - 18.0, rect.top() + RADIUS + 18.0);
+        let area = egui::Rect::from_center_size(centre, egui::Vec2::splat(2.0 * RADIUS + 26.0));
+        let response = ui.interact(area, ui.id().with("gizmo"), egui::Sense::click());
+
+        let forward = self.camera.direction();
+        let right = forward.cross(self.camera.up).normalize_or(DVec3::X);
+        let up = right.cross(forward);
+        let axes = [
+            (DVec3::X, "X", egui::Color32::from_rgb(230, 70, 70), View::Right, View::Left),
+            (DVec3::Y, "Y", egui::Color32::from_rgb(90, 200, 90), View::Back, View::Front),
+            (DVec3::Z, "Z", egui::Color32::from_rgb(90, 130, 255), View::Top, View::Bottom),
+        ];
+        // (screen position, depth away from the viewer, label, colour, view, positive end)
+        let mut ends = Vec::new();
+        for (axis, label, color, positive, negative) in axes {
+            for (sign, view) in [(1.0, positive), (-1.0, negative)] {
+                let a = axis * sign;
+                let offset = egui::vec2(a.dot(right) as f32, -a.dot(up) as f32) * RADIUS;
+                ends.push((centre + offset, a.dot(forward), label, color, view, sign > 0.0));
+            }
+        }
+        ends.sort_by(|a, b| b.1.total_cmp(&a.1)); // far ends first, so near ones are drawn on top
+
+        let pointer = response.hover_pos();
+        let hovered = pointer.and_then(|p| {
+            ends.iter().rev().find(|e| e.0.distance(p) < 11.0).map(|e| e.4) // nearest-to-viewer end wins
+        });
+        let painter = ui.painter_at(area);
+        painter.circle_filled(
+            centre,
+            RADIUS + 12.0,
+            egui::Color32::from_black_alpha(if response.hovered() { 70 } else { 40 }),
+        );
+        for &(pos, _, label, color, view, positive) in &ends {
+            let highlight = hovered == Some(view);
+            if positive {
+                painter.line_segment([centre, pos], egui::Stroke::new(2.0_f32, color));
+                painter.circle_filled(pos, if highlight { 10.0 } else { 8.5 }, color);
+                painter.text(
+                    pos,
+                    egui::Align2::CENTER_CENTER,
+                    label,
+                    egui::FontId::proportional(11.0),
+                    egui::Color32::BLACK,
+                );
+            } else {
+                let fill = if highlight { color } else { color.gamma_multiply(0.45) };
+                painter.circle_filled(pos, if highlight { 8.0 } else { 6.5 }, fill);
+            }
+        }
+        if let Some(view) = hovered {
+            let names = ["Isometric", "Front", "Back", "Left", "Right", "Top", "Bottom"];
+            let name = View::ALL.iter().zip(names).find(|((v, _, _), _)| *v == view).map_or("", |(_, n)| n);
+            response.clone().on_hover_text(format!("{name} view"));
+            if response.clicked() {
+                self.show_view(view);
+                ui.ctx().request_repaint();
+            }
+        }
     }
 
     /// VTK trackball controls: left drag orbits, middle or Shift+left drag pans, right drag or wheel zooms.

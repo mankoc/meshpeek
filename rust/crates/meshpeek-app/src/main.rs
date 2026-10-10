@@ -47,11 +47,17 @@ fn main() -> eframe::Result {
         }),
         ..Default::default()
     };
+    let mut viewport = eframe::egui::ViewportBuilder::default()
+        .with_title("MeshPeek")
+        .with_inner_size([1400.0, 900.0])
+        .with_drag_and_drop(true);
+    if let Ok(icon) = image::load_from_memory(include_bytes!("../assets/icon.png")) {
+        let icon = icon.to_rgba8();
+        let (width, height) = icon.dimensions();
+        viewport = viewport.with_icon(eframe::egui::IconData { rgba: icon.into_raw(), width, height });
+    }
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("MeshPeek")
-            .with_inner_size([1400.0, 900.0])
-            .with_drag_and_drop(true),
+        viewport,
         renderer: eframe::Renderer::Wgpu,
         wgpu_options: WgpuConfiguration { wgpu_setup: WgpuSetup::CreateNew(setup), ..Default::default() },
         ..Default::default()

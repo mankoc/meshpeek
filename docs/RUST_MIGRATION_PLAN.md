@@ -4,6 +4,21 @@
 
 Branch: `rust_migration` (from `main` @ `3d868ee`). The Python version is preserved on branch `python`.
 
+## Status (2026-10-10)
+
+| Phase | State | Evidence |
+|---|---|---|
+| 0 Setup | Done | Rust workspace, `.gitignore`, samples in Git LFS, Python reference dumps, CI workflow |
+| 1 `meshpeek-core` | Done | All formats ported; golden tests match the Python reference for all 6 cases |
+| 2 Renderer + viewer | Done | wgpu renderer with VTK-matching shading; runs on RTX 3070 and on WARP (`--cpu`) |
+| 3 App parity | Done | Every item of §5 implemented; interactive checks listed in `docs/manual-test.md` |
+| 4 Gizmo, large models | Done | Clickable gizmo; 30M-triangle STL at 5.9 ms/frame on GPU; chunked buffers; CPU copies freed |
+| 5 Packaging | Configured | Icon + version info in the exe; MSI (WiX) and `.deb` built by `.github/workflows/release.yml` — **not yet run** (no WiX locally; needs a push) |
+| Cut-over | Pending | Remove Python from `main` once the installers are verified |
+
+Results: `docs/benchmarks.md`. Open follow-up: reduced-detail rendering while orbiting very large models in
+CPU-only mode (2 fps at 30M triangles on WARP).
+
 ## 1. Goals and how we will measure them
 
 | Goal | Target | How it is checked |

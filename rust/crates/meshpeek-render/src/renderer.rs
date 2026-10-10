@@ -149,7 +149,11 @@ impl Renderer {
     }
 
     /// Highest of 4x / 1x MSAA the adapter supports for our colour and depth formats.
+    /// Software adapters (WARP, lavapipe) get none: MSAA multiplies their per-pixel CPU work.
     pub fn best_sample_count(adapter: &wgpu::Adapter) -> u32 {
+        if adapter.get_info().device_type == wgpu::DeviceType::Cpu {
+            return 1;
+        }
         let ok = |format| adapter.get_texture_format_features(format).flags.sample_count_supported(4);
         if ok(COLOR_FORMAT) && ok(DEPTH_FORMAT) { 4 } else { 1 }
     }

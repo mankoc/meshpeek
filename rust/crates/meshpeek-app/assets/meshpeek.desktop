@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=MeshPeek
+GenericName=3D Model Viewer
+Comment=Fast viewer for STL, OBJ, PLY and Lychee .lys files
+Exec=meshpeek %F
+Icon=meshpeek
+Terminal=false
+Categories=Graphics;3DGraphics;Viewer;
+MimeType=model/stl;model/obj;application/sla;

@@ -1,0 +1,70 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<!--
+  MeshPeek MSI (WiX Toolset v3), built by `cargo wix -p meshpeek-app` (see .github/workflows/release.yml).
+  cargo-wix passes Version, CargoTargetBinDir and the build architecture.
+  The UpgradeCode must never change: it lets new versions replace old ones.
+-->
+<?if $(sys.BUILDARCH) = x64 or $(sys.BUILDARCH) = arm64 ?>
+    <?define PlatformProgramFilesFolder = "ProgramFiles64Folder" ?>
+<?else ?>
+    <?define PlatformProgramFilesFolder = "ProgramFilesFolder" ?>
+<?endif ?>
+
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+    <Product
+        Id='*'
+        Name='MeshPeek'
+        UpgradeCode='B7FA6C5F-9454-4CBD-A8C3-D865C4C5216B'
+        Manufacturer='MeshPeek'
+        Language='1033'
+        Codepage='1252'
+        Version='$(var.Version)'>
+
+        <Package
+            Id='*'
+            Keywords='Installer'
+            Description='MeshPeek 3D model viewer'
+            Manufacturer='MeshPeek'
+            InstallerVersion='450'
+            Languages='1033'
+            Compressed='yes'
+            InstallScope='perMachine'
+            SummaryCodepage='1252' />
+
+        <MajorUpgrade
+            Schedule='afterInstallInitialize'
+            DowngradeErrorMessage='A newer version of [ProductName] is already installed.' />
+
+        <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' />
+
+        <Icon Id='MeshPeekIcon' SourceFile='assets\icon.ico' />
+        <Property Id='ARPPRODUCTICON' Value='MeshPeekIcon' />
+
+        <Directory Id='TARGETDIR' Name='SourceDir'>
+            <Directory Id='$(var.PlatformProgramFilesFolder)' Name='PFiles'>
+                <Directory Id='APPLICATIONFOLDER' Name='MeshPeek'>
+                    <Component Id='Executable' Guid='*'>
+                        <File Id='MeshPeekExe' Name='meshpeek.exe' DiskId='1' Source='$(var.CargoTargetBinDir)\meshpeek.exe' KeyPath='yes' />
+                    </Component>
+                </Directory>
+            </Directory>
+            <Directory Id='ProgramMenuFolder'>
+                <Component Id='StartMenuShortcut' Guid='2C151217-3FE7-42B0-8162-04FEE2737BA8'>
+                    <Shortcut
+                        Id='MeshPeekShortcut'
+                        Name='MeshPeek'
+                        Description='Fast viewer for STL, OBJ, PLY and Lychee .lys files'
+                        Target='[APPLICATIONFOLDER]meshpeek.exe'
+                        WorkingDirectory='APPLICATIONFOLDER'
+                        Icon='MeshPeekIcon' />
+                    <RegistryValue Root='HKLM' Key='Software\MeshPeek' Name='StartMenuShortcut' Type='integer' Value='1' KeyPath='yes' />
+                </Component>
+            </Directory>
+        </Directory>
+
+        <Feature Id='Application' Title='MeshPeek' Level='1' ConfigurableDirectory='APPLICATIONFOLDER'>
+            <ComponentRef Id='Executable' />
+            <ComponentRef Id='StartMenuShortcut' />
+        </Feature>
+    </Product>
+</Wix>

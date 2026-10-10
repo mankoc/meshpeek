@@ -431,3 +431,54 @@ The islands and hollow-voxel files are written and read in the 3D window, in
 - The hollow-voxels writer uses `-1` as a fallback for missing sizes with
   `writeUInt32LE`, which throws for negative values. The save error is caught and
   the member is skipped, so a valid file never contains a `-1` size.
+
+---
+
+## 9. Findings from implementing a reader (MeshPeek)
+
+Verified against real files (Lychee 8.0.0 saves) and implemented in `rust/crates/meshpeek-core/src/io/lys/`.
+These fill gaps in the sections above.
+
+### 9.1 Mesh members — `<meshHash>.bin` (and `_hollowing.bin`)
+
+```
+offset  size            field
+0x00    4 × 5           u32 version (= 2), u32 header_len, u32 n_indices, u32 n_coords, u32 reserved
+0x14    n_indices × 4   u32 triangle indices
+...     n_coords × 4    f32 coordinates (x, y, z per vertex)
+```
+
+The data **always starts at byte 20**, even though `header_len` reads 12. File size is exactly
+`20 + 4 * (n_indices + n_coords)`. The mesh is stored **centred on its origin**.
+
+Members with the `.lyd` extension (`type: "libraryGeometry"`) are encrypted Lychee Library store models and
+are not readable.
+
+### 9.2 Object placement (`objects.present.byId[id]`)
+
+- `rotation` is a three.js Euler XYZ in **degrees**, applied about the mesh origin: `R = Rx · Ry · Rz`, then
+  `scale`.
+- `position.x/y` place the mesh origin. `position.z` is the height of the object's **lowest point after
+  rotation** (the support lift); the translation is `position.z − min(R·S·v).z`.
+- `center` is the part's centre in its original file; it is **not** used for placement.
+- `type: "libraryFile"` objects load `properties.file` (e.g. Lychee's bundled `benchy.stl`); centre that mesh
+  on its bounding box first, then place it as above.
+
+### 9.3 Supports (`supports.present.byId`)
+
+- `tip` and `tipNormal` are in the tip object's space (`objectIdTip`).
+- Supports **without** `isBaseTip` stand on the plate: `base.z` is plate height, `base.x/y` are relative to the
+  base object's `position.x/y`.
+- Supports **with** `isBaseTip` branch off another support: `base` is in the base object's space
+  (`objectIdBase`) and lies exactly on the parent support's column.
+- Supports with **`parentTipId`** are braces: their tip lies exactly on another support's column (no tip cone).
+- Shape: foot (`base.diameter`, `base.length`; a small foot for `isSupportGrid` objects) → vertical column up
+  to the knee at `base.length + base.joinLength` along `baseNormal` → angled column to the end of the tip cone →
+  tip cone (`tip.pointDiameter` → `tip.diameter`, `tip.length`) along `tipNormal`.
+- The bracing lattice drawn by Lychee between grid supports is generated at runtime from the bracing presets
+  (`settings.supports.bracingPreset`) and is **not** stored in the file.
+
+### 9.4 Build plate
+
+`plates.present.byId[id]` has `size` and `position` (mm). Skip plates with `isVirtual` or `visible: false`.
+The plate is centred on `position` in X/Y and stands on its Z.
