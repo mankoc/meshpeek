@@ -63,6 +63,8 @@ struct ToolIcons {
     objects: egui::TextureHandle,
     eye: egui::TextureHandle,
     colours: egui::TextureHandle,
+    /// The application icon, shown large in the About window.
+    app: egui::TextureHandle,
 }
 
 impl ToolIcons {
@@ -80,6 +82,7 @@ impl ToolIcons {
             objects: texture("objects", include_bytes!("../assets/toolbar/objects.png")),
             eye: texture("eye", include_bytes!("../assets/toolbar/eye.png")),
             colours: texture("colours", include_bytes!("../assets/toolbar/colours.png")),
+            app: texture("app", include_bytes!("../assets/icon.png")),
         }
     }
 }
@@ -803,8 +806,14 @@ impl MeshPeekApp {
         egui::Window::new("About MeshPeek").collapsible(false).resizable(false).open(&mut self.show_about).show(
             ctx,
             |ui| {
-                ui.label(format!("MeshPeek {}", env!("CARGO_PKG_VERSION")));
-                ui.label("Fast viewer for STL, OBJ, PLY and Lychee .lys files.");
+                ui.horizontal(|ui| {
+                    ui.add(egui::Image::new(&self.tool_icons.app).fit_to_exact_size(egui::vec2(128.0, 128.0)));
+                    ui.vertical(|ui| {
+                        ui.heading(format!("MeshPeek {}", env!("CARGO_PKG_VERSION")));
+                        ui.label("Fast viewer for STL, OBJ, PLY and Lychee .lys files.");
+                        ui.label("by MrIxolite");
+                    });
+                });
                 ui.separator();
                 ui.label(format!("Rendering with: {}", self.adapter));
                 ui.label(format!("Memory in use: {:.0} MB", memory_mb()));
