@@ -19,6 +19,27 @@ pub const SUPPORT_DETAIL: [(&str, u32); 4] = [("Low", 6), ("Medium", 12), ("High
 
 pub const MAX_RECENT: usize = 10;
 
+/// UI theme choices; "System" follows the operating system.
+pub const THEMES: [&str; 3] = ["System", "Light", "Dark"];
+
+/// Space mouse behaviour.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SpaceMouseSettings {
+    pub enabled: bool,
+    /// Speed multiplier (1 = default).
+    pub sensitivity: f32,
+    pub invert_pan: bool,
+    pub invert_zoom: bool,
+    pub invert_rotation: bool,
+}
+
+impl Default for SpaceMouseSettings {
+    fn default() -> Self {
+        Self { enabled: true, sensitivity: 1.0, invert_pan: false, invert_zoom: false, invert_rotation: false }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -30,6 +51,8 @@ pub struct Settings {
     pub support_detail: String,
     /// Blender, Maya and ZBrush export OBJ with Y up.
     pub obj_y_up: bool,
+    pub theme: String,
+    pub space_mouse: SpaceMouseSettings,
     pub recent_files: Vec<PathBuf>,
 }
 
@@ -42,6 +65,8 @@ impl Default for Settings {
             support_color: [0xe8, 0xa2, 0x4a],
             support_detail: "Medium".into(),
             obj_y_up: true,
+            theme: "System".into(),
+            space_mouse: SpaceMouseSettings::default(),
             recent_files: Vec::new(),
         }
     }
@@ -72,6 +97,10 @@ impl Settings {
         if material(&settings.support_material).is_none() {
             settings.support_material = defaults.support_material.clone();
         }
+        if !THEMES.contains(&settings.theme.as_str()) {
+            settings.theme = defaults.theme.clone();
+        }
+        settings.space_mouse.sensitivity = settings.space_mouse.sensitivity.clamp(0.1, 5.0);
         if !SUPPORT_DETAIL.iter().any(|(name, _)| *name == settings.support_detail) {
             settings.support_detail = defaults.support_detail;
         }
@@ -126,9 +155,14 @@ mod tests {
         let settings = Settings { model_material: "Metal".into(), model_color: [1, 2, 3], ..Settings::default() };
         let text = toml::to_string(&settings).unwrap();
         assert_eq!(Settings::from_toml(&text), settings);
-        let invalid = Settings::from_toml("support_material = \"Chrome\"\nsupport_detail = \"Ultra\"\n");
+        let invalid =
+            Settings::from_toml("support_material = \"Chrome\"\nsupport_detail = \"Ultra\"\ntheme = \"Neon\"\n");
         assert_eq!(invalid.support_material, "Plastic");
         assert_eq!(invalid.support_detail, "Medium");
+        assert_eq!(invalid.theme, "System");
+        let spacemouse = Settings::from_toml("[space_mouse]\nsensitivity = 50.0\ninvert_zoom = true\n");
+        assert_eq!(spacemouse.space_mouse.sensitivity, 5.0); // clamped
+        assert!(spacemouse.space_mouse.invert_zoom && spacemouse.space_mouse.enabled);
     }
 
     #[test]

@@ -10,7 +10,32 @@ use wgpu::util::DeviceExt;
 use crate::{COLOR_FORMAT, Camera, GpuMesh};
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-const PLATE_COLOR: [f32; 3] = [0.478, 0.518, 0.580]; // #7a8494
+
+/// Colours of everything that is not a model: background gradient, build plate and its outline.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Palette {
+    pub background_top: [f32; 3],
+    pub background_bottom: [f32; 3],
+    /// RGB + opacity of the translucent plate floor.
+    pub plate_fill: [f32; 4],
+    /// RGB + opacity of the build-volume outline.
+    pub plate_outline: [f32; 4],
+}
+
+impl Palette {
+    pub const DARK: Palette = Palette {
+        background_top: [0.294, 0.314, 0.353],    // #4b505a
+        background_bottom: [0.145, 0.153, 0.169], // #25272b
+        plate_fill: [0.478, 0.518, 0.580, 0.35],  // #7a8494
+        plate_outline: [0.478, 0.518, 0.580, 0.6],
+    };
+    pub const LIGHT: Palette = Palette {
+        background_top: [0.965, 0.973, 0.984],     // #f6f8fb
+        background_bottom: [0.780, 0.808, 0.851],  // #c7ced9
+        plate_fill: [0.553, 0.600, 0.671, 0.30],   // #8d99ab
+        plate_outline: [0.353, 0.400, 0.471, 0.7], // #5a6678
+    };
+}
 
 /// Phong-style surface parameters (same meaning as VTK's).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -37,6 +62,8 @@ pub struct ObjectId(u64);
 struct GlobalsUniform {
     view: [[f32; 4]; 4],
     proj: [[f32; 4]; 4],
+    background_top: [f32; 4],
+    background_bottom: [f32; 4],
 }
 
 #[repr(C)]
@@ -92,6 +119,7 @@ pub struct Renderer {
     lines: Option<(wgpu::Buffer, u32)>,
     floor: Option<(wgpu::Buffer, u32)>,
     overlays_dirty: bool,
+    palette: Palette,
     target: Option<Target>,
     wireframe: bool,
     /// Something changed since the last render (the camera is compared separately by the caller).
@@ -142,6 +170,7 @@ impl Renderer {
             lines: None,
             floor: None,
             overlays_dirty: true,
+            palette: Palette::DARK,
             target: None,
             wireframe: false,
             dirty: true,
@@ -160,6 +189,19 @@ impl Renderer {
 
     pub fn supports_wireframe(&self) -> bool {
         self.pipelines.wire.is_some()
+    }
+
+    /// Background and plate colours (e.g. to follow the UI's light/dark theme).
+    pub fn set_palette(&mut self, palette: Palette) {
+        if self.palette != palette {
+            self.palette = palette;
+            self.overlays_dirty = true;
+            self.dirty = true;
+        }
+    }
+
+    pub fn palette(&self) -> Palette {
+        self.palette
     }
 
     pub fn set_wireframe(&mut self, on: bool) {
@@ -263,7 +305,14 @@ impl Renderer {
             self.rebuild_overlays(device);
         }
         let (view, proj) = camera.matrices(size[0] as f64 / size[1] as f64, self.scene_bounds());
-        let globals = GlobalsUniform { view: view.to_cols_array_2d(), proj: proj.to_cols_array_2d() };
+        let [t0, t1, t2] = self.palette.background_top;
+        let [b0, b1, b2] = self.palette.background_bottom;
+        let globals = GlobalsUniform {
+            view: view.to_cols_array_2d(),
+            proj: proj.to_cols_array_2d(),
+            background_top: [t0, t1, t2, 1.0],
+            background_bottom: [b0, b1, b2, 1.0],
+        };
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
 
         let target = self.target.as_ref().unwrap();
@@ -366,7 +415,7 @@ impl Renderer {
         let mut floor = Vec::new();
         for plate in &self.plates {
             let (lo, hi) = plate_box(plate);
-            let outline = [PLATE_COLOR[0], PLATE_COLOR[1], PLATE_COLOR[2], 0.6];
+            let outline = self.palette.plate_outline;
             let corner = |i: usize| {
                 [
                     if i & 1 == 0 { lo.x } else { hi.x },
@@ -381,7 +430,7 @@ impl Renderer {
                 lines.push(FlatVertex { position: corner(a), color: outline });
                 lines.push(FlatVertex { position: corner(b), color: outline });
             }
-            let fill = [PLATE_COLOR[0], PLATE_COLOR[1], PLATE_COLOR[2], 0.35];
+            let fill = self.palette.plate_fill;
             for i in [0, 1, 3, 0, 3, 2] {
                 floor.push(FlatVertex { position: corner(i), color: fill });
             }

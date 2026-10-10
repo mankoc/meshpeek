@@ -52,6 +52,13 @@ impl Camera {
         self.up = self.right().cross(direction).normalize_or(DVec3::Z);
     }
 
+    /// Turn the camera around its viewing direction by `degrees` (positive = counter-clockwise on screen).
+    pub fn roll(&mut self, degrees: f64) {
+        let turn = DQuat::from_axis_angle(self.direction(), -degrees.to_radians());
+        self.up = (turn * self.up).normalize();
+        self.orthogonalize_up();
+    }
+
     /// Move camera and focal point in the view plane by a number of pixels of a viewport `height` high.
     pub fn pan(&mut self, dx_pixels: f64, dy_pixels: f64, height: f64) {
         let per_pixel = 2.0 * self.distance() * (self.fov_y.to_radians() / 2.0).tan() / height.max(1.0);
@@ -126,6 +133,16 @@ mod tests {
         let mut camera = Camera::default();
         camera.frame(DVec3::splat(10.0), DVec3::splat(30.0));
         assert!((camera.focal - DVec3::splat(20.0)).length() < 1e-9);
+    }
+
+    #[test]
+    fn roll_keeps_position_and_turns_up() {
+        let mut camera = Camera::default();
+        let (position, up) = (camera.position, camera.up);
+        camera.roll(90.0);
+        assert!((camera.position - position).length() < 1e-9);
+        assert!(camera.up.dot(up).abs() < 1e-9); // a quarter turn: new up is perpendicular to the old one
+        assert!(camera.up.dot(camera.direction()).abs() < 1e-9);
     }
 
     #[test]

@@ -1,0 +1,5 @@
+# MeshPeek: let the logged-in desktop user read 3Dconnexion space mice directly (raw HID), so MeshPeek works
+# without the spacenavd daemon. Installed by the meshpeek .deb into /lib/udev/rules.d/.
+# 0x256f = 3Dconnexion; 0x046d with product 0xc6xx = older 3Dconnexion devices sold under the Logitech id.
+KERNEL=="hidraw*", ATTRS{idVendor}=="256f", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c6[0-9a-f][0-9a-f]", TAG+="uaccess"

@@ -7,8 +7,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // no console window in release builds
 
 mod app;
+mod help;
 mod loading;
 mod settings;
+mod spacemouse;
 mod viewport;
 
 use std::path::PathBuf;

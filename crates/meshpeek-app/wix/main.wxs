@@ -47,6 +47,12 @@
                     <Component Id='Executable' Guid='*'>
                         <File Id='MeshPeekExe' Name='meshpeek.exe' DiskId='1' Source='$(var.CargoTargetBinDir)\meshpeek.exe' KeyPath='yes' />
                     </Component>
+                    <Component Id='License' Guid='*'>
+                        <File Id='License' Name='LICENSE.txt' DiskId='1' Source='$(sys.SOURCEFILEDIR)..\..\..\LICENSE' KeyPath='yes' />
+                    </Component>
+                    <Component Id='ThirdPartyLicenses' Guid='*'>
+                        <File Id='ThirdParty' Name='THIRD-PARTY-LICENSES.html' DiskId='1' Source='$(var.CargoTargetBinDir)\THIRD-PARTY-LICENSES.html' KeyPath='yes' />
+                    </Component>
                 </Directory>
             </Directory>
             <Directory Id='ProgramMenuFolder'>
@@ -66,6 +72,8 @@
 
         <Feature Id='Application' Title='MeshPeek' Level='1' ConfigurableDirectory='APPLICATIONFOLDER'>
             <ComponentRef Id='Executable' />
+            <ComponentRef Id='License' />
+            <ComponentRef Id='ThirdPartyLicenses' />
             <ComponentRef Id='StartMenuShortcut' />
         </Feature>
     </Product>

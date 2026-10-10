@@ -116,3 +116,17 @@ fn renders_the_bust_sample_with_supports() {
     let orange = pixels.chunks(4).filter(|p| p[0] > 150 && p[1] > 90 && p[1] < 190 && p[2] < 110).count();
     assert!(orange > 1000, "supports not visible ({orange} orange pixels)");
 }
+
+#[test]
+fn light_palette_gives_a_light_background() {
+    let Some((device, queue, adapter)) = device() else {
+        eprintln!("skipping: no wgpu adapter");
+        return;
+    };
+    let mut renderer = Renderer::new(&device, Renderer::best_sample_count(&adapter));
+    renderer.set_palette(meshpeek_render::Palette::LIGHT);
+    renderer.render(&device, &queue, [64, 64], &Camera::default());
+    let (pixels, _) = renderer.read_pixels(&device, &queue).unwrap();
+    let top_left = &pixels[..3];
+    assert!(top_left.iter().all(|&c| c > 220), "light background expected, got {top_left:?}");
+}

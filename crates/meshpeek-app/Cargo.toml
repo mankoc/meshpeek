@@ -6,6 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 
 [[bin]]
 name = "meshpeek"
@@ -16,6 +17,7 @@ directories = "6.0.0"
 eframe = { version = "0.32.3", default-features = false, features = ["wgpu", "default_fonts", "persistence", "wayland", "x11"] }
 env_logger = "0.11.11"
 glam = "0.34.1"
+hidapi = { version = "2.6.7", default-features = false, features = ["windows-native", "linux-native-basic-udev"] }
 image = { version = "0.25.9", default-features = false, features = ["png"] }
 log = "0.4.34"
 memory-stats = "1.2.0"
@@ -43,4 +45,7 @@ assets = [
     ["target/release/meshpeek", "usr/bin/", "755"],
     ["assets/meshpeek.desktop", "usr/share/applications/", "644"],
     ["assets/icon.png", "usr/share/icons/hicolor/256x256/apps/meshpeek.png", "644"],
+    ["../../LICENSE", "usr/share/doc/meshpeek/", "644"],
+    ["target/release/THIRD-PARTY-LICENSES.html", "usr/share/doc/meshpeek/", "644"],
+    ["assets/99-meshpeek-spacemouse.rules", "lib/udev/rules.d/", "644"],
 ]

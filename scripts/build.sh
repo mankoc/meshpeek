@@ -9,7 +9,7 @@
 #   --check          only run the checks; build nothing (used by CI)
 #   --skip-tests     skip the checks, go straight to the release build
 #   --no-deb         do not build the .deb
-#   --install-tools  install the build dependencies (apt) and cargo-deb first
+#   --install-tools  install the build dependencies (apt), cargo-deb and cargo-about first
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -32,6 +32,7 @@ if [ "$install_tools" = 1 ]; then
     sudo apt-get install -y build-essential pkg-config libx11-dev libxkbcommon-dev libwayland-dev libgtk-3-dev \
         mesa-vulkan-drivers git-lfs
     command -v cargo-deb >/dev/null || cargo install cargo-deb --locked
+    command -v cargo-about >/dev/null || cargo install cargo-about --locked --features cli
 fi
 
 if [ "$skip_tests" = 0 ]; then
@@ -46,6 +47,10 @@ if [ "$check" = 1 ]; then echo; echo "Checks passed."; exit 0; fi
 
 step "Building release executable"
 cargo build --release -p meshpeek-app
+
+step "Collecting third-party licenses"
+command -v cargo-about >/dev/null || { echo "cargo-about not found: run with --install-tools once" >&2; exit 1; }
+cargo about generate about.hbs -o target/release/THIRD-PARTY-LICENSES.html
 version=$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Cargo.toml | head -n1)
 mkdir -p dist
 
@@ -53,7 +58,8 @@ step "Packaging portable tar.gz"
 name="MeshPeek-$version-linux-x64"
 stage="dist/$name"
 rm -rf "$stage" && mkdir -p "$stage"
-cp target/release/meshpeek README.md LYS_FILE_FORMAT.md crates/meshpeek-app/assets/icon.png \
+cp target/release/meshpeek target/release/THIRD-PARTY-LICENSES.html LICENSE README.md LYS_FILE_FORMAT.md \
+    crates/meshpeek-app/assets/icon.png \
     crates/meshpeek-app/assets/meshpeek.desktop "$stage/"
 tar -C dist -czf "dist/$name.tar.gz" "$name"
 rm -rf "$stage"

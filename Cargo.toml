@@ -6,8 +6,9 @@ members = ["crates/meshpeek-core", "crates/meshpeek-render", "crates/meshpeek-ap
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-license = "MIT"
+license = "CC-BY-NC-SA-4.0"
 repository = "https://github.com/mankoc/STL_viewer"
+publish = false
 
 [profile.release]
 lto = "thin"

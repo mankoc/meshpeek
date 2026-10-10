@@ -3,14 +3,22 @@
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
-use eframe::egui::{self, Color32, Key, KeyboardShortcut, Modifiers, RichText};
+use eframe::egui::{self, Color32, Key, KeyboardShortcut, Modifiers, RichText, Stroke};
 use eframe::egui_wgpu::RenderState;
 use meshpeek_core::{ObjectKind, SUPPORTED_EXTENSIONS};
-use meshpeek_render::{ObjectId, Style};
+use meshpeek_render::{ObjectId, Palette, Style};
 
+use crate::help;
 use crate::loading::{self, LoadResult};
-use crate::settings::{MATERIALS, SUPPORT_DETAIL, Settings, material, rgb};
+use crate::settings::{MATERIALS, SUPPORT_DETAIL, Settings, THEMES, material, rgb};
+use crate::spacemouse::{self, Motion};
 use crate::viewport::{View, Viewport};
+
+/// License of MeshPeek itself.
+const LICENSE_NAME: &str = "CC BY-NC-SA 4.0";
+const LICENSE_URL: &str = "https://creativecommons.org/licenses/by-nc-sa/4.0/";
+/// Notices of the open-source libraries built into MeshPeek; shipped next to the executable.
+const THIRD_PARTY_FILE: &str = "THIRD-PARTY-LICENSES.html";
 
 /// One row of the objects tree.
 struct Entry {
@@ -40,7 +48,12 @@ pub struct MeshPeekApp {
     wireframe: bool,
     show_objects: bool,
     show_about: bool,
+    show_controls: bool,
+    show_guide: bool,
     adapter: String,
+    space_mouse: spacemouse::Shared,
+    /// Connected space mouse, for the About window.
+    space_device: Option<String>,
     /// `MESHPEEK_SNAPSHOT=<file.png>`: once loading has finished, save a screenshot and quit (for tests).
     snapshot: Option<(PathBuf, u32)>,
 }
@@ -51,6 +64,7 @@ const CHILD_INDENT: f32 = 16.0;
 const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
 const CLEAR: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
 const PREFERENCES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
+const CONTROLS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F1);
 
 impl MeshPeekApp {
     pub fn new(cc: &eframe::CreationContext<'_>, files: Vec<PathBuf>) -> Self {
@@ -73,7 +87,11 @@ impl MeshPeekApp {
             wireframe: false,
             show_objects: true,
             show_about: false,
+            show_controls: false,
+            show_guide: false,
             adapter,
+            space_mouse: spacemouse::start(cc.egui_ctx.clone()),
+            space_device: None,
             snapshot: std::env::var_os("MESHPEEK_SNAPSHOT").map(|p| (PathBuf::from(p), 0)),
         };
         app.open_files(&cc.egui_ctx, files);
@@ -204,6 +222,9 @@ impl MeshPeekApp {
         if ctx.input_mut(|i| i.consume_shortcut(&PREFERENCES)) {
             self.draft = Some(self.settings.clone());
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&CONTROLS)) {
+            self.show_controls = !self.show_controls;
+        }
         if ctx.wants_keyboard_input() {
             return; // typing in a text field
         }
@@ -266,6 +287,16 @@ impl MeshPeekApp {
                     self.set_wireframe(wireframe);
                 }
                 ui.checkbox(&mut self.show_objects, "Objects panel");
+                ui.separator();
+                ui.menu_button("Theme", |ui| {
+                    for theme in THEMES {
+                        if ui.radio(self.settings.theme == theme, theme).clicked() {
+                            self.settings.theme = theme.to_string();
+                            self.settings.save();
+                            ui.close();
+                        }
+                    }
+                });
             });
             ui.menu_button("Settings", |ui| {
                 if ui.add(egui::Button::new("Preferences…").shortcut_text(ctx.format_shortcut(&PREFERENCES))).clicked()
@@ -274,6 +305,13 @@ impl MeshPeekApp {
                 }
             });
             ui.menu_button("Help", |ui| {
+                if ui.add(egui::Button::new("Controls").shortcut_text(ctx.format_shortcut(&CONTROLS))).clicked() {
+                    self.show_controls = true;
+                }
+                if ui.button("User guide").clicked() {
+                    self.show_guide = true;
+                }
+                ui.separator();
                 if ui.button("About MeshPeek").clicked() {
                     self.show_about = true;
                 }
@@ -355,19 +393,23 @@ impl MeshPeekApp {
             }
             let entry = &self.entries[index];
             let tooltip = format!("{}\n{} triangles", entry.source.display(), thousands(entry.triangles));
-            let label = ui.add(egui::Label::new(&entry.name).sense(egui::Sense::click())).on_hover_text(tooltip);
-            let id = entry.id;
-            label.context_menu(|ui| {
-                if ui.button("Center on object").clicked() {
-                    self.viewport.center_on(id);
-                    ui.close();
-                }
-            });
-            if self.viewport.focus == Some(id) {
+            ui.label(&entry.name).on_hover_text(tooltip);
+            // Models get a centre-on icon; only one model can be centred at a time.
+            if entry.kind == ObjectKind::Model && entry.parent.is_none() {
+                let id = entry.id;
+                let centred = self.viewport.focus == Some(id);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let button = ui.add(egui::Button::new("🎯").frame(false));
-                    if button.on_hover_text("Camera is centred on this object. Click to stop centring.").clicked() {
-                        self.viewport.fit_all();
+                    let hint = if centred {
+                        "Centred on this model: rotation pivots around it. Click to show the whole scene again."
+                    } else {
+                        "Centre the view on this model and rotate around it"
+                    };
+                    if focus_icon(ui, centred).on_hover_text(hint).clicked() {
+                        if centred {
+                            self.viewport.fit_all();
+                        } else {
+                            self.viewport.center_on(id);
+                        }
                     }
                 });
             }
@@ -407,6 +449,19 @@ impl MeshPeekApp {
                 ui.label("OBJ files:");
                 ui.checkbox(&mut draft.obj_y_up, "Y is up (Blender, Maya, ZBrush)")
                     .on_hover_text("Rotate OBJ files so their Y axis points up. Applied by reloading open files.");
+                ui.end_row();
+                ui.label("Space mouse:");
+                ui.checkbox(&mut draft.space_mouse.enabled, "Enabled");
+                ui.end_row();
+                ui.label("    Sensitivity:");
+                ui.add(egui::Slider::new(&mut draft.space_mouse.sensitivity, 0.1..=5.0).logarithmic(true));
+                ui.end_row();
+                ui.label("    Invert:");
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut draft.space_mouse.invert_pan, "Pan");
+                    ui.checkbox(&mut draft.space_mouse.invert_zoom, "Zoom");
+                    ui.checkbox(&mut draft.space_mouse.invert_rotation, "Rotation");
+                });
                 ui.end_row();
             });
             ui.separator();
@@ -449,6 +504,23 @@ impl MeshPeekApp {
                 ui.separator();
                 ui.label(format!("Rendering with: {}", self.adapter));
                 ui.label(format!("Memory in use: {:.0} MB", memory_mb()));
+                ui.label(format!("Space mouse: {}", self.space_device.as_deref().unwrap_or("none detected")));
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label("License:");
+                    ui.hyperlink_to(LICENSE_NAME, LICENSE_URL);
+                });
+                match third_party_file() {
+                    Some(path) => {
+                        if ui.link("Third-party licenses").clicked() {
+                            let url = format!("file:///{}", path.display().to_string().replace('\\', "/"));
+                            ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                        }
+                    }
+                    None => {
+                        ui.weak(format!("Third-party licenses: {THIRD_PARTY_FILE} (included with the installed app)"));
+                    }
+                }
             },
         );
     }
@@ -458,6 +530,8 @@ impl eframe::App for MeshPeekApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.receive_loads();
         self.shortcuts(ctx);
+        self.apply_theme(ctx);
+        self.navigate(ctx);
 
         egui::TopBottomPanel::top("menu").show(ctx, |ui| self.menu_bar(ui));
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| self.toolbar(ui));
@@ -481,11 +555,77 @@ impl eframe::App for MeshPeekApp {
         });
         self.preferences_window(ctx);
         self.about_window(ctx);
+        help::controls_window(ctx, &mut self.show_controls);
+        help::guide_window(ctx, &mut self.show_guide);
         self.snapshot(ctx);
     }
 }
 
 impl MeshPeekApp {
+    /// Follow the theme setting in the UI and in the 3D view.
+    fn apply_theme(&mut self, ctx: &egui::Context) {
+        let preference = match self.settings.theme.as_str() {
+            "Light" => egui::ThemePreference::Light,
+            "Dark" => egui::ThemePreference::Dark,
+            _ => egui::ThemePreference::System,
+        };
+        if ctx.options(|o| o.theme_preference) != preference {
+            ctx.set_theme(preference);
+        }
+        let palette = if ctx.theme() == egui::Theme::Light { Palette::LIGHT } else { Palette::DARK };
+        self.viewport.renderer.set_palette(palette);
+    }
+
+    /// Keyboard and space mouse navigation; keeps repainting while either is moving the view.
+    fn navigate(&mut self, ctx: &egui::Context) {
+        let mut moving = self.viewport.keyboard(ctx);
+        let (motion, pressed, device) = {
+            let mut state = self.space_mouse.lock().unwrap();
+            let fresh = state.updated.is_some_and(|t| t.elapsed() < spacemouse::STALE);
+            let motion = if fresh { state.motion } else { Motion::default() };
+            (motion, std::mem::take(&mut state.pressed), state.device.clone())
+        };
+        self.space_device = device;
+        // While Preferences is open, preview its space mouse settings.
+        let settings = self.draft.as_ref().unwrap_or(&self.settings).space_mouse;
+        if settings.enabled {
+            if pressed & 1 != 0 {
+                self.viewport.fit_all();
+            }
+            if pressed & 2 != 0 {
+                self.viewport.show_view(View::Isometric);
+            }
+            let dt = ctx.input(|i| i.stable_dt.min(0.1)) as f64;
+            moving |= self.viewport.space_mouse(motion, &settings, dt);
+        }
+        if moving {
+            ctx.request_repaint();
+        }
+    }
+
+    /// Test hook: `MESHPEEK_SNAPSHOT_ACTIONS="theme=Light;center=Bust;controls;guide;about;preferences"` is
+    /// applied once loading finished, before the snapshot.
+    fn snapshot_actions(&mut self) {
+        let Ok(actions) = std::env::var("MESHPEEK_SNAPSHOT_ACTIONS") else { return };
+        for action in actions.split(';').map(str::trim) {
+            match action.split_once('=') {
+                Some(("theme", theme)) => self.settings.theme = theme.to_string(),
+                Some(("center", name)) => {
+                    if let Some(e) = self.entries.iter().find(|e| e.name == name && e.parent.is_none()) {
+                        self.viewport.center_on(e.id);
+                    }
+                }
+                _ => match action {
+                    "controls" => self.show_controls = true,
+                    "guide" => self.show_guide = true,
+                    "about" => self.show_about = true,
+                    "preferences" => self.draft = Some(self.settings.clone()),
+                    _ => {}
+                },
+            }
+        }
+    }
+
     /// Test hook: after loading finished and a few frames were drawn, capture the window to PNG and quit.
     fn snapshot(&mut self, ctx: &egui::Context) {
         let Some((path, frames)) = &mut self.snapshot else { return };
@@ -513,12 +653,49 @@ impl MeshPeekApp {
         }
         if self.pending == 0 {
             *frames += 1;
-            if *frames == 5 {
+            if *frames == 1 {
+                self.snapshot_actions();
+            } else if *frames == 8 {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             }
         }
         ctx.request_repaint();
     }
+}
+
+/// Crosshair icon for centring on a model: an outline when not centred, filled with the accent colour when
+/// centred.
+fn focus_icon(ui: &mut egui::Ui, centred: bool) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::click());
+    let visuals = ui.visuals();
+    let color = if centred {
+        visuals.selection.bg_fill
+    } else if response.hovered() {
+        visuals.strong_text_color()
+    } else {
+        visuals.weak_text_color()
+    };
+    let painter = ui.painter();
+    let (c, r) = (rect.center(), 5.0);
+    let stroke = Stroke::new(1.5_f32, color);
+    if centred {
+        painter.circle_filled(c, r, color);
+        painter.circle_filled(c, 1.8, Color32::WHITE);
+    } else {
+        painter.circle_stroke(c, r, stroke);
+    }
+    for d in [egui::vec2(1.0, 0.0), egui::vec2(-1.0, 0.0), egui::vec2(0.0, 1.0), egui::vec2(0.0, -1.0)] {
+        painter.line_segment([c + d * (r + 0.5), c + d * (r + 3.5)], stroke);
+    }
+    response
+}
+
+/// The third-party notices file next to the executable (zip, MSI) or in /usr/share/doc (Linux package).
+fn third_party_file() -> Option<PathBuf> {
+    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    [exe_dir.join(THIRD_PARTY_FILE), PathBuf::from("/usr/share/doc/meshpeek").join(THIRD_PARTY_FILE)]
+        .into_iter()
+        .find(|p| p.exists())
 }
 
 fn memory_mb() -> f64 {

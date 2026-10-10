@@ -15,16 +15,27 @@ meshpeek [--cpu] [files...]
 
 ## Controls
 
-| Action | Input |
-|---|---|
-| Orbit | Left drag |
-| Pan | Middle drag, or Shift + left drag |
-| Zoom | Mouse wheel, or right drag |
-| Fit all | F |
-| Standard views | 0 Isometric, 1 Front, 2 Back, 3 Left, 4 Right, 5 Top, 6 Bottom, or click an axis of the gizmo (top right) |
-| Wireframe | W |
-| Centre on an object | Right-click it in the Objects panel → *Center on object*; click the 🎯 icon to stop |
-| Preferences | Ctrl+, (materials and colours for models and supports, support detail, OBJ up axis) |
+| Action | Mouse | Keyboard |
+|---|---|---|
+| Orbit | Left drag | Arrow keys (hold) |
+| Pan | Middle drag, or Shift + left drag | Shift + arrow keys |
+| Zoom | Mouse wheel, or right drag | + / − or Page Up / Page Down |
+| Roll | | Q / E |
+| Fit all | | F |
+| Standard views | Click an axis of the gizmo (top right) | 0 Isometric, 1 Front, 2 Back, 3 Left, 4 Right, 5 Top, 6 Bottom |
+| Wireframe | | W |
+| Centre on a model | Crosshair icon next to it in the Objects panel (click again, or F, to stop) | |
+| Help | | F1 (Help → Controls); Help → User guide |
+| Preferences | | Ctrl+, (materials and colours, support detail, OBJ up axis, space mouse) |
+
+View → Theme switches between System, Light and Dark.
+
+**Space mouse (3Dconnexion):** push/lift the cap to pan, pull/push to zoom, tilt/spin to orbit, twist to roll;
+button 1 fits all, button 2 shows the isometric view. Sensitivity and axis inversion are in Preferences.
+- Windows: works directly over USB when the 3Dconnexion 3DxWare driver is *not* installed (it would take the
+  device exclusively).
+- Linux: works through the `spacenavd` daemon if it runs, otherwise directly (the `.deb` installs a udev rule
+  that gives the desktop user access).
 
 ## Build
 
@@ -91,3 +102,14 @@ meshpeek-gen <out.stl> <triangles>   # synthetic large STL for testing
 ```
 
 Run them with `cargo run --release -p meshpeek-tools --bin <tool> -- <args>`.
+
+## License
+
+MeshPeek is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+License](https://creativecommons.org/licenses/by-nc-sa/4.0/) (CC BY-NC-SA 4.0); see `LICENSE`. In short: you may
+use, share and adapt it for **non-commercial** purposes, with attribution, and adaptations must use the same
+license.
+
+MeshPeek includes open-source libraries under their own (permissive) licenses. Their notices are collected in
+`THIRD-PARTY-LICENSES.html` by the build scripts (`cargo about`, configured in `about.toml`) and shipped with
+every package.

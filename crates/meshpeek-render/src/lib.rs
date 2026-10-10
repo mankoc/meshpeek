@@ -7,7 +7,7 @@ pub mod renderer;
 
 pub use camera::Camera;
 pub use gpu_mesh::GpuMesh;
-pub use renderer::{Material, ObjectId, Renderer, Style};
+pub use renderer::{Material, ObjectId, Palette, Renderer, Style};
 pub use wgpu;
 
 /// Colour format of the image handed to the UI (gamma space, as egui expects for native textures).

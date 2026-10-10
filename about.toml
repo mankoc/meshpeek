@@ -1,0 +1,26 @@
+# cargo-about: generates THIRD-PARTY-LICENSES.html (the notices of the open-source libraries built into
+# MeshPeek), shipped with every package. Run by scripts/build.ps1 and scripts/build.sh.
+#
+# Licenses accepted for bundled dependencies; a dependency under any other license fails the build, so new
+# licenses get reviewed before they ship.
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "BSL-1.0",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "bzip2-1.0.6",
+    "MPL-2.0",
+    "OFL-1.1",         # egui's built-in emoji fonts
+    "Ubuntu-font-1.0", # egui's built-in text font
+]
+
+# Only what ships in the program: not test or build tools, and not MeshPeek's own crates (publish = false).
+ignore-dev-dependencies = true
+ignore-build-dependencies = true
+private = { ignore = true }

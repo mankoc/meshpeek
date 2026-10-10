@@ -15,7 +15,7 @@
     Do not build the MSI even if WiX is available.
 .PARAMETER InstallTools
     Install the packaging tools first: WiX Toolset 3 (portable binaries, unpacked under %LOCALAPPDATA%, no admin
-    rights needed) and cargo-wix.
+    rights needed), cargo-wix and cargo-about.
 
 .EXAMPLE
     .\scripts\build.ps1                  # checks + exe + zip + MSI
@@ -53,6 +53,7 @@ if ($InstallTools) {
         $env:Path = "$PortableWix;$env:Path"
     }
     if (-not (Get-Command cargo-wix -ErrorAction SilentlyContinue)) { Run { cargo install cargo-wix --locked } }
+    if (-not (Get-Command cargo-about -ErrorAction SilentlyContinue)) { Run { cargo install cargo-about --locked --features cli } }
 }
 
 if (-not $SkipTests) {
@@ -67,6 +68,12 @@ if ($Check) { Write-Host "`nChecks passed." -ForegroundColor Green; exit 0 }
 
 Step "Building release executable"
 Run { cargo build --release -p meshpeek-app }
+
+Step "Collecting third-party licenses"
+if (-not (Get-Command cargo-about -ErrorAction SilentlyContinue)) {
+    throw "cargo-about not found: run with -InstallTools once"
+}
+Run { cargo about generate about.hbs -o target\release\THIRD-PARTY-LICENSES.html }
 $Version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
 $Dist = Join-Path $Root "dist"
 New-Item -ItemType Directory -Force $Dist | Out-Null
@@ -76,7 +83,7 @@ $Name = "MeshPeek-$Version-windows-x64"
 $Stage = Join-Path $Dist $Name
 Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $Stage | Out-Null
-Copy-Item target\release\meshpeek.exe, README.md, LYS_FILE_FORMAT.md $Stage
+Copy-Item target\release\meshpeek.exe, target\release\THIRD-PARTY-LICENSES.html, LICENSE, README.md, LYS_FILE_FORMAT.md $Stage
 Compress-Archive -Path "$Stage\*" -DestinationPath "$Dist\$Name.zip" -Force
 Remove-Item -Recurse -Force $Stage
 Write-Host "    $Dist\$Name.zip"

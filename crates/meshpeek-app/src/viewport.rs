@@ -6,6 +6,9 @@ use eframe::egui_wgpu::RenderState;
 use glam::DVec3;
 use meshpeek_render::{Camera, ObjectId, Renderer, wgpu};
 
+use crate::settings::SpaceMouseSettings;
+use crate::spacemouse::Motion;
+
 /// Standard views: direction from the focal point to the camera, and view-up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -49,6 +52,8 @@ pub struct Viewport {
     pub focus: Option<ObjectId>,
     texture: Option<egui::TextureId>,
     rendered: Option<(Camera, [u32; 2])>,
+    /// Height of the view in points, for converting pan speeds.
+    height: f64,
 }
 
 impl Viewport {
@@ -59,6 +64,7 @@ impl Viewport {
             focus: None,
             texture: None,
             rendered: None,
+            height: 600.0,
         }
     }
 
@@ -91,8 +97,79 @@ impl Viewport {
         self.frame_target();
     }
 
+    /// Keyboard navigation while keys are held: arrows orbit, Shift+arrows pan, +/- or Page Up/Down zoom,
+    /// Q/E roll. Speeds are per second, so the frame rate does not matter. Returns true while moving.
+    pub fn keyboard(&mut self, ctx: &egui::Context) -> bool {
+        if ctx.wants_keyboard_input() {
+            return false; // typing in a text field
+        }
+        use egui::Key;
+        let (dt, shift, command, down) = ctx.input(|i| {
+            let keys = [
+                Key::ArrowLeft,
+                Key::ArrowRight,
+                Key::ArrowUp,
+                Key::ArrowDown,
+                Key::Plus,
+                Key::Equals,
+                Key::PageUp,
+                Key::Minus,
+                Key::PageDown,
+                Key::Q,
+                Key::E,
+            ];
+            (
+                i.stable_dt.min(0.1) as f64,
+                i.modifiers.shift,
+                i.modifiers.command || i.modifiers.alt,
+                keys.map(|k| i.key_down(k)),
+            )
+        });
+        let [left, right, up, down_arrow, plus, equals, page_up, minus, page_down, q, e] = down;
+        if command || !down.iter().any(|&d| d) {
+            return false;
+        }
+        let horizontal = (left as i32 - right as i32) as f64; // +1 = like dragging left
+        let vertical = (up as i32 - down_arrow as i32) as f64; // +1 = like dragging up
+        if shift {
+            let speed = 0.6 * self.height * dt; // pixels: 60% of the view height per second
+            self.camera.pan(-horizontal * speed, -vertical * speed, self.height);
+        } else {
+            self.camera.orbit(90.0 * horizontal * dt, 90.0 * vertical * dt);
+        }
+        let zoom = ((plus || equals || page_up) as i32 - (minus || page_down) as i32) as f64;
+        self.camera.dolly(1.8f64.powf(zoom * dt));
+        self.camera.roll(90.0 * (q as i32 - e as i32) as f64 * dt);
+        true
+    }
+
+    /// Apply space mouse motion for one frame of `dt` seconds. Returns true while the cap is deflected.
+    pub fn space_mouse(&mut self, motion: Motion, settings: &SpaceMouseSettings, dt: f64) -> bool {
+        // Full deflection is about 350 device units; ignore small values around the rest position.
+        let scale = |v: f32| {
+            let v = (v / 350.0).clamp(-1.0, 1.0) as f64;
+            if v.abs() < 0.04 { 0.0 } else { v * settings.sensitivity as f64 }
+        };
+        let [tx, ty, tz] = motion.translation.map(scale);
+        let [rx, ry, rz] = motion.rotation.map(scale);
+        if [tx, ty, tz, rx, ry, rz].iter().all(|v| *v == 0.0) {
+            return false;
+        }
+        let sign = |invert: bool| if invert { -1.0 } else { 1.0 };
+        let (pan, zoom, rotate) =
+            (sign(settings.invert_pan), sign(settings.invert_zoom), sign(settings.invert_rotation));
+        // "Object" mode: the model follows the cap.
+        let speed = self.height * dt; // pan: one view height per second at full deflection
+        self.camera.pan(pan * tx * speed, -pan * ty * speed, self.height);
+        self.camera.dolly(2.5f64.powf(zoom * tz * dt));
+        self.camera.orbit(-rotate * ry * 120.0 * dt, -rotate * rx * 120.0 * dt);
+        self.camera.roll(rotate * rz * 120.0 * dt);
+        true
+    }
+
     pub fn ui(&mut self, ui: &mut egui::Ui, render_state: &RenderState) {
         let rect = ui.available_rect_before_wrap();
+        self.height = rect.height().max(1.0) as f64;
         let response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
         self.handle_input(ui, &response, rect);
 
