@@ -2,7 +2,14 @@
 
 All notable changes to MeshPeek, newest first.
 
-## Unreleased
+## 0.4.0 — 2026-10-12
+
+### Added
+- **CHITUBOX projects (`.chitubox`)**: every model is shown where it stands on the plate, at its lift height, with
+  the supports CHITUBOX generated for it (as a "Supports" child in the objects list), also for files from older
+  CHITUBOX versions; the information window shows the lift and the number of contact points. The format is not
+  published; `CHITUBOX_FILE_FORMAT.md` is a full specification worked out from sample files. The installer offers
+  MeshPeek for `.chitubox` files too.
 
 ### Changed
 - **Preferences** is arranged in sections listed on the left (Appearance with the model and support colours,

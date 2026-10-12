@@ -1,5 +1,6 @@
 //! Loading any supported file into a [`Scene`].
 
+pub mod chitubox;
 pub mod lys;
 pub mod obj;
 pub mod ply;
@@ -16,7 +17,7 @@ use crate::mesh::Mesh;
 use crate::scene::{Scene, SceneObject};
 
 /// Lower-case extensions (without the dot) that [`load`] understands.
-pub const SUPPORTED_EXTENSIONS: &[&str] = &["stl", "obj", "ply", "lys"];
+pub const SUPPORTED_EXTENSIONS: &[&str] = &["stl", "obj", "ply", "lys", "chitubox"];
 
 /// Rotation of +90 degrees about X: a Y-up model (x, y, z) becomes Z-up (x, -z, y).
 pub const Y_UP_TO_Z_UP: DMat4 = DMat4::from_cols(
@@ -97,6 +98,8 @@ pub fn load_data(name: &Path, data: Data, options: &LoadOptions) -> Result<Scene
     let size = data.len() as u64;
     let mut scene = if ext == "lys" {
         lys::load_data(name, data, options.support_sides)?
+    } else if ext == "chitubox" {
+        chitubox::load_bytes(&data, name)?
     } else {
         let mut object = SceneObject::new(stem(name), parse_mesh(name, &data)?, name);
         if ext == "obj" && options.obj_y_up {
@@ -111,6 +114,7 @@ pub fn load_data(name: &Path, data: Data, options: &LoadOptions) -> Result<Scene
     };
     let format = match ext.as_str() {
         "lys" => "Lychee scene (.lys)".to_string(),
+        "chitubox" => "CHITUBOX project (.chitubox)".to_string(),
         other => format!("{} file", other.to_uppercase()),
     };
     let size = format_size(size);

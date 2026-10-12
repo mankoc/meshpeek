@@ -63,8 +63,9 @@ pub const GUIDE: &[(&str, &[&str])] = &[
     (
         "Opening files",
         &[
-            "MeshPeek opens STL (binary and ASCII), OBJ, PLY and Lychee Slicer .lys files. Use File > Open (Ctrl+O), \
-             File > Open Recent, drag files onto the window, or pass them on the command line.",
+            "MeshPeek opens STL (binary and ASCII), OBJ, PLY, Lychee Slicer .lys and CHITUBOX .chitubox files. \
+             Use File > Open (Ctrl+O), File > Open Recent, drag files onto the window, or pass them on the \
+             command line.",
             "Several files can be open at once; they keep their own coordinates, so parts exported from one \
              assembly line up. File > Clear scene (Ctrl+W) removes everything.",
             "File > Open folder lists a folder in the Files tab; tick files there to show them. ZIP, 7z and RAR \
@@ -87,7 +88,8 @@ pub const GUIDE: &[(&str, &[&str])] = &[
     (
         "Objects panel",
         &[
-            "Every model is listed with a checkbox; for Lychee files its supports appear indented under it. \
+            "Every model is listed with a checkbox; for Lychee and CHITUBOX files its supports appear indented \
+             under it. \
              Hiding a model hides its supports as well; supports can also be hidden on their own.",
             "Click the crosshair icon next to a model to centre the view on it: rotation then pivots around that \
              model and the standard views keep it framed. Only one model can be centred at a time; click the \
@@ -103,6 +105,16 @@ pub const GUIDE: &[(&str, &[&str])] = &[
              rebuilt from the data in the file with the same geometry rules as Lychee, including every tip, \
              middle and foot shape (cone, cube, cylinder, cross, octagon…) and all raft types.",
             "Models from the Lychee Library (.lyd) are encrypted and cannot be shown; they are listed as skipped.",
+        ],
+    ),
+    (
+        "CHITUBOX .chitubox files",
+        &[
+            "Every model of a CHITUBOX project is shown where it stands on the plate, at its lift height, with \
+             the supports CHITUBOX generated for it (tips, columns, braces and foot pads exactly as saved). The \
+             (i) icon shows the lift and the number of contact points.",
+            "Projects saved by older CHITUBOX versions open too, supports included. The printer's build plate is \
+             not stored in these files, so none is drawn.",
         ],
     ),
     (

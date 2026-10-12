@@ -1,7 +1,17 @@
 # MeshPeek
 
-Fast viewer for STL, OBJ, PLY and Lychee `.lys` files, written in Rust. Renders on the GPU, or on the CPU
+Fast viewer for STL, OBJ, PLY, Lychee `.lys` and CHITUBOX `.chitubox` files, written in Rust. Renders on the GPU, or on the CPU
 when there is no usable GPU.
+
+## Supported files
+
+| Format | What is shown |
+|---|---|
+| STL (binary and ASCII), OBJ, PLY | The mesh (PLY and OBJ vertex colours too) |
+| Lychee Slicer `.lys` | Every model placed as in Lychee, with its supports, rafts and the build plate |
+| CHITUBOX `.chitubox` | Every model where it stands on the plate, with the supports CHITUBOX generated (also from older CHITUBOX versions) |
+
+Models can also be opened from inside ZIP, 7z and RAR archives.
 
 ## Run
 
@@ -81,7 +91,7 @@ Windows and Ubuntu machines and attaches them to the run. Tick *publish* to also
 
 | Path | Purpose |
 |---|---|
-| `crates/meshpeek-core` | File formats (STL, OBJ, PLY, `.lys` incl. supports), meshes and scenes. No GPU/UI code. |
+| `crates/meshpeek-core` | File formats (STL, OBJ, PLY, `.lys` and `.chitubox` incl. supports), meshes and scenes. No GPU/UI code. |
 | `crates/meshpeek-render` | wgpu renderer: GPU meshes, camera, shading, plate, axes. No UI code. |
 | `crates/meshpeek-app` | The `meshpeek` desktop app (eframe/egui), icon, installer definitions. |
 | `crates/meshpeek-tools` | `meshpeek-info`, `lys-dump`, `meshpeek-bench`, `meshpeek-gen`. |
@@ -89,6 +99,7 @@ Windows and Ubuntu machines and attaches them to the run. Tick *publish* to also
 | `scripts/` | Build and packaging scripts. |
 | `docs/` | Migration plan, benchmarks, manual test checklist. |
 | `LYS_FILE_FORMAT.md` | Lychee `.lys` format notes. |
+| `CHITUBOX_FILE_FORMAT.md` | CHITUBOX `.chitubox` project format specification (reverse-engineered). |
 
 The original Python implementation is kept on the `python` branch.
 

@@ -200,7 +200,7 @@ impl MeshPeekApp {
             preload_results: channel(),
             preloaded_for: None,
             preferences_section: preferences::Section::default(),
-            status: "Open or drop STL, OBJ, PLY or LYS files".into(),
+            status: "Open or drop STL, OBJ, PLY, LYS or CHITUBOX files".into(),
             wireframe: false,
             show_objects: true,
             show_toolbar: true,
@@ -1001,7 +1001,8 @@ impl MeshPeekApp {
                     ui.add(egui::Image::new(&self.tool_icons.app).fit_to_exact_size(egui::vec2(128.0, 128.0)));
                     ui.vertical(|ui| {
                         ui.heading(format!("MeshPeek {}", env!("CARGO_PKG_VERSION")));
-                        ui.label("Fast viewer for STL, OBJ, PLY and Lychee .lys files.");
+                        ui.label("Fast viewer for STL, OBJ, PLY, Lychee .lys and CHITUBOX .chitubox files.");
+                        ui.label("Lychee and CHITUBOX scenes are shown with their supports.");
                         ui.label("by MrIxolite");
                     });
                 });
