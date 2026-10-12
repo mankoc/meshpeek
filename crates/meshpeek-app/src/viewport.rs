@@ -272,7 +272,7 @@ impl Viewport {
         }
     }
 
-    /// VTK trackball controls: left drag orbits, middle or Shift+left drag pans, right drag or wheel zooms.
+    /// Mouse controls: left drag orbits (turntable around the world Z axis), middle or Shift+left drag pans, right drag or wheel zooms.
     fn handle_input(&mut self, ui: &egui::Ui, response: &egui::Response, rect: egui::Rect) {
         let delta = response.drag_delta();
         let (w, h) = (rect.width().max(1.0) as f64, rect.height().max(1.0) as f64);
@@ -284,7 +284,7 @@ impl Viewport {
             {
                 self.camera.pan(dx, dy, h);
             } else if response.dragged_by(egui::PointerButton::Primary) {
-                self.camera.orbit(-200.0 * dx / w, -200.0 * dy / h); // a full-width drag turns 200 degrees, like VTK
+                self.camera.orbit_turntable(-200.0 * dx / w, -200.0 * dy / h); // a full-width drag turns 200 degrees
             } else if response.dragged_by(egui::PointerButton::Secondary) {
                 self.camera.dolly(1.01f64.powf(-dy));
             }

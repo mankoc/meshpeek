@@ -7,7 +7,7 @@ pub const CONTROLS: &[(&str, &[(&str, &str)])] = &[
     (
         "Mouse",
         &[
-            ("Left drag", "Orbit around the focal point"),
+            ("Left drag", "Orbit: sideways turns around the vertical axis, up/down tilts (the horizon stays level)"),
             ("Middle drag, or Shift + left drag", "Pan"),
             ("Mouse wheel, or right drag", "Zoom"),
             ("Gizmo (top right): click an axis", "Look along that axis"),

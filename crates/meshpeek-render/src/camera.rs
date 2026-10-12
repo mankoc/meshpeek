@@ -1,4 +1,5 @@
-//! Orbiting camera with VTK's trackball behaviour (azimuth/elevation around the focal point).
+//! Orbiting camera (azimuth/elevation around the focal point): the keyboard and space mouse use VTK's trackball
+//! orbit, the mouse a turntable orbit around the world Z axis.
 
 use glam::{DQuat, DVec3, Mat4};
 
@@ -44,6 +45,25 @@ impl Camera {
         let offset = pitch * offset;
         self.position = self.focal + offset;
         self.up = (pitch * self.up).normalize();
+        self.orthogonalize_up();
+    }
+
+    /// Turntable orbit around the focal point: `azimuth` turns about the world Z axis, `elevation` tilts toward
+    /// or away from the pole (positive lowers the camera), in degrees. The view-up is reset to world Z, so the
+    /// horizon stays level, and the tilt stops just short of the poles so the view never flips over.
+    pub fn orbit_turntable(&mut self, azimuth: f64, elevation: f64) {
+        const POLE_MARGIN: f64 = 0.5_f64.to_radians();
+        let offset = DQuat::from_axis_angle(DVec3::Z, azimuth.to_radians()) * (self.position - self.focal);
+        let radius = offset.length().max(1e-9);
+        let polar = (offset.z / radius).clamp(-1.0, 1.0).acos();
+        let polar = (polar + elevation.to_radians()).clamp(POLE_MARGIN, std::f64::consts::PI - POLE_MARGIN);
+        // Horizontal heading of the camera; straight above or below, fall back to the side the screen-bottom is on.
+        let heading = DVec3::new(offset.x, offset.y, 0.0)
+            .try_normalize()
+            .or_else(|| DVec3::new(-self.up.x, -self.up.y, 0.0).try_normalize())
+            .unwrap_or(DVec3::X);
+        self.position = self.focal + radius * (polar.sin() * heading + polar.cos() * DVec3::Z);
+        self.up = DVec3::Z;
         self.orthogonalize_up();
     }
 
@@ -126,6 +146,21 @@ mod tests {
         camera.orbit(37.0, -21.0);
         assert!((camera.distance() - distance).abs() < 1e-9);
         assert!(camera.up.dot(camera.direction()).abs() < 1e-9);
+    }
+
+    #[test]
+    fn turntable_keeps_the_horizon_level_and_never_flips() {
+        let mut camera = Camera::default();
+        let distance = camera.distance();
+        camera.orbit_turntable(37.0, -21.0);
+        assert!((camera.distance() - distance).abs() < 1e-9);
+        assert!(camera.up.z > 0.0 && camera.up.dot(camera.direction()).abs() < 1e-9);
+        assert!(camera.right().z.abs() < 1e-9); // screen x stays horizontal
+        camera.orbit_turntable(0.0, -500.0); // far past the top pole: stops short of it
+        assert!(camera.up.is_finite() && camera.up.z > 0.0);
+        assert!(camera.direction().z < -0.99);
+        camera.orbit_turntable(10.0, 20.0); // and can leave the pole again
+        assert!(camera.position.is_finite() && camera.up.z > 0.0);
     }
 
     #[test]

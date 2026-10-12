@@ -9,6 +9,10 @@ All notable changes to MeshPeek, newest first.
   to the neighbouring feet. Lychee does not store the raft's shape, so this is an approximation.
 - A manual **Build exe** GitHub workflow that builds only the Windows executable.
 
+### Changed
+- **Mouse orbit** is now a turntable: dragging sideways turns the model around the vertical (Z) axis instead of the
+  current view axis, dragging up/down tilts, the horizon stays level and the view cannot flip over the poles.
+
 ### Fixed
 - **Rotated `.lys` objects:** an object rotated about several axes was turned in the wrong order, and the support
   feet ignored the object's yaw, so supports hung sideways and in the wrong place. Objects and their support grids
