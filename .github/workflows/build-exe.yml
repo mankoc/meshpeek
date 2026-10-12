@@ -1,0 +1,22 @@
+name: Build exe
+
+# Manual only: Actions tab -> "Build exe" -> "Run workflow".
+# Builds just the Windows executable (no zip, MSI or checks) and attaches meshpeek.exe to the run as an artifact.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build release executable
+        run: cargo build --release -p meshpeek-app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meshpeek-exe
+          path: target/release/meshpeek.exe
+          if-no-files-found: error

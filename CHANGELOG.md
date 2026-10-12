@@ -2,6 +2,22 @@
 
 All notable changes to MeshPeek, newest first.
 
+## 0.2.3 — 2026-10-12
+
+### Added
+- **Raft:** `.lys` scenes that have the raft switched on now show it: a flat disc under every foot, joined by bars
+  to the neighbouring feet. Lychee does not store the raft's shape, so this is an approximation.
+- A manual **Build exe** GitHub workflow that builds only the Windows executable.
+
+### Fixed
+- **Rotated `.lys` objects:** an object rotated about several axes was turned in the wrong order, and the support
+  feet ignored the object's yaw, so supports hung sideways and in the wrong place. Objects and their support grids
+  now match Lychee (checked on a file rotated about all three axes: every branch and brace support lands on its
+  parent).
+- **Support rendering:** in some `.lys` files a plate support's `baseNormal` is stored in the object's own rotated
+  space instead of world space, which drew long horizontal beams across the model. Both readings are now tried and
+  the upward one is used, so every branch support lands on its parent column.
+
 ## 0.2.2 — 2026-10-10
 
 ### Changed

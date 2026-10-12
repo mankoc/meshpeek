@@ -9,9 +9,13 @@
 //! Segment ends are only capped where they are exposed (the tip touching the model, the underside of the
 //! foot); every other end is hidden inside a joint, the next segment or a parent support.
 //!
-//! Coordinates (checked against sample files): `tip` is in the tip object's space. Branch `base` points are in
+//! Coordinates (checked against sample files): `tip` is in the tip object's space. A plate support's
+//! `baseNormal` is world space in some records and object space in others (same file); the one pointing up wins. Branch `base` points are in
 //! the base object's space and lie exactly on the parent column. Plate `base` points are at plate height with
-//! x/y relative to the base object's position.
+//! x/y relative to the base object's position and turned by the object's Z rotation (the grid follows the yaw).
+//!
+//! Raft (only when the scene has it switched on): the file stores no shape, so it is approximated from the feet:
+//! a flat slab under every foot, joined by bars to the neighbouring feet (see [`raft_mesh`]).
 //!
 //! Not drawn: Lychee's bracing lattice between grid supports. It is generated from bracing presets at runtime
 //! and is not stored in the file.
@@ -28,6 +32,11 @@ use crate::mesh::Mesh;
 /// Default facets around each support column.
 pub const SIDES: u32 = 12;
 
+/// Raft thickness in mm (the file does not store it).
+pub const RAFT_HEIGHT: f64 = 1.0;
+/// Feet closer than this many times their nearest-neighbour spacing are joined by a raft bar.
+const RAFT_REACH: f64 = 1.5;
+
 /// Joint spheres must stay inside the columns: an n-sided prism's flat sides sit at `r * cos(pi / n)`, so a
 /// full-radius sphere would poke out between them. 0.99 keeps the surfaces from z-fighting.
 pub fn joint_scale(sides: u32) -> f64 {
@@ -38,6 +47,8 @@ pub fn joint_scale(sides: u32) -> f64 {
 struct Builder {
     segments: Vec<Segment>,
     joints: Vec<Joint>,
+    /// Plate feet: position on the plate and radius, for the raft.
+    feet: Vec<(DVec3, f64)>,
 }
 
 struct Segment {
@@ -70,6 +81,7 @@ pub fn build(
     transforms: &HashMap<&str, DMat4>,
     objects: &HashMap<&str, &Value>,
     sides: u32,
+    raft: bool,
 ) -> HashMap<String, Mesh> {
     let Some(supports) = supports else { return HashMap::new() };
     let by_id = index(get(supports, "byId"));
@@ -122,8 +134,17 @@ pub fn build(
         } else {
             let base_obj = objects.get(base_id).copied();
             let position = base_obj.map_or(DVec3::ZERO, |o| vec3(get(o, "position"), 0.0));
-            let foot = vec3(get(s, "base"), 0.0) + position * DVec3::new(1.0, 1.0, 0.0);
-            let up = unit(vec3(get(s, "baseNormal"), 0.0), DVec3::Z);
+            // The support grid is laid out in the object's yaw-turned frame: x/y are turned by the object's Z rotation.
+            let yaw = base_obj.map_or(0.0, |o| vec3(get(o, "rotation"), 0.0).z.to_radians());
+            let base = vec3(get(s, "base"), 0.0);
+            let (sin, cos) = yaw.sin_cos();
+            let foot = DVec3::new(base.x * cos - base.y * sin, base.x * sin + base.y * cos, base.z)
+                + position * DVec3::new(1.0, 1.0, 0.0);
+            // Some files store a plate support's normal in world space, others in the (rotated) object's own space,
+            // even within one file. A plate support grows upward, so take the reading that points higher.
+            let stored = unit(vec3(get(s, "baseNormal"), 0.0), DVec3::Z);
+            let in_object_space = unit(transforms[base_id].transform_vector3(stored), DVec3::Z);
+            let up = if in_object_space.z > stored.z { in_object_space } else { stored };
             let join_radius = cfg(base_cfg, "joinDiameter", 2.0 * column_radius) / 2.0;
             let base_length = cfg(base_cfg, "length", 0.5);
             let (foot_radius, foot_height) = if base_obj.is_some_and(|o| truthy(o, "isSupportGrid")) {
@@ -131,6 +152,7 @@ pub fn build(
             } else {
                 (cfg(base_cfg, "diameter", 6.0) / 2.0, base_length)
             };
+            b.feet.push((foot, foot_radius));
             let foot_top = foot + up * foot_height;
             let mut knee = foot + up * (base_length + cfg(base_cfg, "joinLength", 0.0));
             segment(foot, foot_top, foot_radius, join_radius, true, false);
@@ -153,9 +175,54 @@ pub fn build(
         .map(|(oid, b)| {
             let joints: Vec<Joint> =
                 b.joints.into_iter().map(|j| Joint { radius: j.radius * joint_scale(sides), ..j }).collect();
-            (oid, Mesh::merge([frustums(&b.segments, sides), joint_spheres(&joints, sides)]))
+            let raft = if raft { raft_mesh(&b.feet, sides) } else { Mesh::default() };
+            (oid, Mesh::merge([frustums(&b.segments, sides), joint_spheres(&joints, sides), raft]))
         })
         .collect()
+}
+
+/// Raft approximated from the feet `(position, radius)`: a flat disc under every foot, plus a flat bar between
+/// each pair of feet that are neighbours (closer than [`RAFT_REACH`] times the spacing of the closer one's
+/// nearest neighbour), which gives the triangulated lattice Lychee draws.
+pub fn raft_mesh(feet: &[(DVec3, f64)], sides: u32) -> Mesh {
+    let n = feet.len();
+    let flat = |p: DVec3| glam::DVec2::new(p.x, p.y);
+    let nearest: Vec<f64> = (0..n)
+        .map(|i| {
+            (0..n).filter(|&j| j != i).map(|j| flat(feet[i].0).distance(flat(feet[j].0))).fold(f64::INFINITY, f64::min)
+        })
+        .collect();
+    let discs: Vec<Segment> = feet
+        .iter()
+        .map(|&(foot, r)| Segment { p0: foot, p1: foot + DVec3::Z * RAFT_HEIGHT, r0: r, r1: r, cap0: true, cap1: true })
+        .collect();
+    let mut meshes = vec![frustums(&discs, sides)];
+    for i in 0..n {
+        for j in i + 1..n {
+            let (a, b) = (flat(feet[i].0), flat(feet[j].0));
+            if a.distance(b) <= RAFT_REACH * nearest[i].min(nearest[j]) {
+                meshes.push(flat_bar(a, b, feet[i].1.min(feet[j].1), feet[i].0.z, RAFT_HEIGHT));
+            }
+        }
+    }
+    Mesh::merge(meshes)
+}
+
+/// Closed flat box from `a` to `b` (in the plane), `width` wide and `height` tall, standing on height `z`.
+fn flat_bar(a: glam::DVec2, b: glam::DVec2, width: f64, z: f64, height: f64) -> Mesh {
+    let dir = (b - a).normalize_or_zero();
+    let side = glam::DVec2::new(-dir.y, dir.x) * (width / 2.0);
+    let corners = [a + side, a - side, b - side, b + side];
+    let mut mesh = Mesh::default();
+    for z in [z, z + height] {
+        mesh.vertices.extend(corners.map(|c| [c.x as f32, c.y as f32, z as f32]));
+    }
+    mesh.faces.extend([[4, 5, 6], [4, 6, 7], [0, 2, 1], [0, 3, 2]]); // top, bottom
+    for i in 0..4u32 {
+        let j = (i + 1) % 4;
+        mesh.faces.extend([[i, j, j + 4], [i, j + 4, i + 4]]);
+    }
+    mesh
 }
 
 fn to_f32(p: DVec3) -> [f32; 3] {
@@ -268,6 +335,21 @@ mod tests {
         let tube = |p1, cap0| Segment { p0: DVec3::ZERO, p1, r0: 1.0, r1: 1.0, cap0, cap1: false };
         let mesh = frustums(&[tube(DVec3::Z, true), tube(DVec3::X, false)], 8);
         assert_eq!(mesh.n_faces(), 2 * (2 * 8) + 8); // two open tubes plus one end disc
+    }
+
+    #[test]
+    fn raft_joins_neighbouring_feet_only() {
+        // three feet in a row 6 mm apart and one far away: the far one gets a disc but no bar
+        let feet: Vec<(DVec3, f64)> = [0.0, 6.0, 12.0, 100.0].iter().map(|&x| (DVec3::new(x, 0.0, 0.0), 3.0)).collect();
+        let discs = frustums(
+            &feet
+                .iter()
+                .map(|&(p, r)| Segment { p0: p, p1: p + DVec3::Z, r0: r, r1: r, cap0: true, cap1: true })
+                .collect::<Vec<_>>(),
+            8,
+        );
+        let raft = raft_mesh(&feet, 8);
+        assert_eq!(raft.n_faces(), discs.n_faces() + 2 * 12); // two bars (0-6 and 6-12), 12 triangles each
     }
 
     #[test]

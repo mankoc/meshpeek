@@ -16,14 +16,15 @@ use crate::scene::{ObjectKind, Plate, Scene, SceneObject};
 
 /// Object -> world for a mesh centred on its origin (as Lychee stores it).
 ///
-/// Rotation is three.js Euler XYZ in degrees about the mesh origin. `position` x/y place that origin;
+/// Rotation is Euler XYZ in degrees about the mesh origin, applied about X, then Y, then Z (`R = Rz * Ry * Rx`;
+/// checked against a file rotated about all three axes, where the support tips only fit this order). `position` x/y place that origin;
 /// `position.z` is the height of the object's lowest point after rotation (the support lift).
 /// `center` is the part's centre in its original file and is not used for placement.
 pub fn object_matrix(obj: &Value, vertices: &[[f32; 3]]) -> DMat4 {
     let r = vec3(get(obj, "rotation"), 0.0) * (std::f64::consts::PI / 180.0);
-    let linear = DMat3::from_rotation_x(r.x)
+    let linear = DMat3::from_rotation_z(r.z)
         * DMat3::from_rotation_y(r.y)
-        * DMat3::from_rotation_z(r.z)
+        * DMat3::from_rotation_x(r.x)
         * DMat3::from_diagonal(vec3(get(obj, "scale"), 1.0));
     let mut translation = vec3(get(obj, "position"), 0.0);
     let row_z = linear.row(2);
@@ -106,7 +107,8 @@ pub fn load_data(file: &Path, data: Data, support_sides: u32) -> Result<Scene> {
     }
 
     let support_state = path(&state, "supports.present");
-    let mut support_meshes = supports::build(support_state, &placed, &by_id, support_sides);
+    let raft = path(&state, "settings.batch.msla.raft.enabled").and_then(Value::as_bool).unwrap_or(false);
+    let mut support_meshes = supports::build(support_state, &placed, &by_id, support_sides, raft);
     for (oid, model) in models {
         scene.objects.push(model);
         if let Some(mesh) = support_meshes.remove(oid) {

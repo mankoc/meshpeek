@@ -456,8 +456,10 @@ are not readable.
 
 ### 9.2 Object placement (`objects.present.byId[id]`)
 
-- `rotation` is a three.js Euler XYZ in **degrees**, applied about the mesh origin: `R = Rx · Ry · Rz`, then
-  `scale`.
+- `rotation` is in **degrees**, applied about the mesh origin: X first, then Y, then Z (`R = Rz · Ry · Rx`),
+  then `scale`. The order only matters for objects rotated about several axes; it was settled with
+  `Nosferatu_Base_75mm_SUP.lys` (106°, −21°, 49°), where only this order puts the support tips above their
+  feet at consistent heights and makes the brace tips of each support lie on one vertical column.
 - `position.x/y` place the mesh origin. `position.z` is the height of the object's **lowest point after
   rotation** (the support lift); the translation is `position.z − min(R·S·v).z`.
 - `center` is the part's centre in its original file; it is **not** used for placement.
@@ -468,13 +470,19 @@ are not readable.
 
 - `tip` and `tipNormal` are in the tip object's space (`objectIdTip`).
 - Supports **without** `isBaseTip` stand on the plate: `base.z` is plate height, `base.x/y` are relative to the
-  base object's `position.x/y`.
+  base object's `position.x/y` **and turned by the object's Z rotation** (the support grid follows the object's
+  yaw: with a 49.5° yaw, a foot stored at (24, −24) stands at (33.84, 2.65)).
 - Supports **with** `isBaseTip` branch off another support: `base` is in the base object's space
   (`objectIdBase`) and lies exactly on the parent support's column.
 - Supports with **`parentTipId`** are braces: their tip lies exactly on another support's column (no tip cone).
 - Shape: foot (`base.diameter`, `base.length`; a small foot for `isSupportGrid` objects) → vertical column up
   to the knee at `base.length + base.joinLength` along `baseNormal` → angled column to the end of the tip cone →
   tip cone (`tip.pointDiameter` → `tip.diameter`, `tip.length`) along `tipNormal`.
+- `baseNormal` of a plate support is **not stored consistently**: in the same file (`Nosferatu_Figure_75mm_SUP.lys`,
+  object rotated 85° about X) most records hold the world-space direction `(0, 0, 1)`, while a few hold the
+  object-space equivalent `(0, 0.996, 0.087)`. Reading both as world space turns the latter into long horizontal
+  columns. Reading each one both ways (as stored, and rotated by the base object's matrix) and keeping the
+  one with the larger world `z` makes every branch start (`isBaseTip`) land exactly on its parent column.
 - The bracing lattice drawn by Lychee between grid supports is generated at runtime from the bracing presets
   (`settings.supports.bracingPreset`) and is **not** stored in the file.
 
