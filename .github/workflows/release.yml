@@ -2,7 +2,7 @@ name: Release
 
 # Push a tag v<version> (the version in Cargo.toml) to build everything and publish a GitHub release:
 #   git tag v0.2.0 && git push origin v0.2.0
-# The release gets the Windows zip + MSI and the Linux tar.gz + .deb, with notes generated from the commits.
+# The release gets the Windows zip + MSI and the Linux tar.gz + .deb; its text is the version's section of CHANGELOG.md.
 
 on:
   push:
@@ -33,6 +33,17 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - name: Release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # the section "## <version> - <date>" up to the next "## " heading, without the heading itself
+          awk -v v="$version" '/^## /{ found = ($2 == v); next } found' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::error::CHANGELOG.md has no section for version ${version}"
+            exit 1
+          fi
+          cat notes.md
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -40,5 +51,5 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           name: MeshPeek ${{ github.ref_name }}
-          generate_release_notes: true
+          body_path: notes.md
           files: dist/*
