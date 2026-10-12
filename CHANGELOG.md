@@ -2,6 +2,13 @@
 
 All notable changes to MeshPeek, newest first.
 
+## Unreleased
+
+### Added
+- **Help → Check for updates**: asks GitHub for the latest MeshPeek release; when it is newer than the running
+  version, shows its release notes and a button to the download page. MeshPeek only goes online when asked, and
+  uses the system's `curl` (built into Windows 10 and 11) rather than shipping its own network code.
+
 ## 0.4.1 — 2026-10-12
 
 ### Added

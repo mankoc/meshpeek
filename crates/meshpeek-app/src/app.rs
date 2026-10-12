@@ -17,6 +17,7 @@ use crate::preferences;
 use crate::settings::{MATERIALS, Settings, material, rgb};
 use crate::sources;
 use crate::spacemouse::{self, Motion};
+use crate::updates::Updates;
 use crate::viewport::{View, Viewport};
 
 /// License of MeshPeek itself.
@@ -150,6 +151,8 @@ pub struct MeshPeekApp {
     show_about: bool,
     show_controls: bool,
     show_guide: bool,
+    /// Help → Check for updates: its window and last result.
+    updates: Updates,
     /// GPU name and backend, for the About window.
     adapter: String,
     /// Latest input from a space mouse, written by its reader thread.
@@ -206,6 +209,7 @@ impl MeshPeekApp {
             show_about: false,
             show_controls: false,
             show_guide: false,
+            updates: Updates::default(),
             adapter,
             space_mouse: spacemouse::start(cc.egui_ctx.clone()),
             space_device: None,
@@ -652,6 +656,9 @@ impl MeshPeekApp {
                 if ui.button("User guide").clicked() {
                     self.show_guide = true;
                 }
+                if ui.button("Check for updates…").clicked() {
+                    self.updates.check(&ctx);
+                }
                 ui.separator();
                 if ui.button("About MeshPeek").clicked() {
                     self.show_about = true;
@@ -1038,6 +1045,7 @@ impl eframe::App for MeshPeekApp {
         self.about_window(ctx);
         help::controls_window(ctx, &mut self.show_controls);
         help::guide_window(ctx, &mut self.show_guide);
+        self.updates.window(ctx);
         self.snapshot(ctx);
     }
 }
@@ -1089,7 +1097,7 @@ impl MeshPeekApp {
 
     /// Test hook: `MESHPEEK_SNAPSHOT_ACTIONS="theme=Light;center=Bust;view=Front;orbit=90,0;pan=100,0;dolly=4;controls;guide;about;preferences"` is
     /// applied once loading finished, before the snapshot. `preferences=<section>` opens Preferences on a section. `wait=<ms>` pauses (background preloads go on) and
-    /// takes the preloads that finished; `next` / `previous` step through the folder like the arrow keys; `files` shows the Files tab; `arrange` arranges the objects.
+    /// takes the preloads that finished; `next` / `previous` step through the folder like the arrow keys; `files` shows the Files tab; `arrange` arranges the objects; `updates` checks for updates.
     fn snapshot_actions(&mut self, ctx: &egui::Context) {
         let Ok(actions) = std::env::var("MESHPEEK_SNAPSHOT_ACTIONS") else { return };
         for action in actions.split(';').map(str::trim) {
@@ -1135,6 +1143,7 @@ impl MeshPeekApp {
                     "preferences" => self.draft = Some(self.settings.clone()),
                     "files" => self.panel_tab = PanelTab::Files,
                     "arrange" => self.arrange(),
+                    "updates" => self.updates.check(ctx),
                     "next" => self.step_file(ctx, 1),
                     "previous" => self.step_file(ctx, -1),
                     _ => {}

@@ -1766,6 +1766,7 @@ dependencies = [
  "rayon",
  "rfd",
  "serde",
+ "serde_json",
  "sevenz-rust2",
  "toml",
  "unrar",

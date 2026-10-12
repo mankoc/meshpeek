@@ -136,6 +136,11 @@ pub const GUIDE: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        "Updates",
+        &["Help > Check for updates asks GitHub whether a newer MeshPeek has been released and shows what is new, \
+             with a link to the download page. MeshPeek only goes online when you ask it to."],
+    ),
+    (
         "Graphics card and performance",
         &["MeshPeek draws with the graphics card. Without a usable one it falls back to software rendering \
              (start with --cpu to force it); Help > About shows which is in use. Very large models stay fast on \

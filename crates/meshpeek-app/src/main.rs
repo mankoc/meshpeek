@@ -15,6 +15,7 @@ mod preferences;
 mod settings;
 mod sources;
 mod spacemouse;
+mod updates;
 mod viewport;
 
 use std::path::PathBuf;
