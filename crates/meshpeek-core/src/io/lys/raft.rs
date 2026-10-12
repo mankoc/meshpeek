@@ -1,4 +1,4 @@
-//! Rafts ("foundations") of `.lys` objects, ported from Lychee's `foundation/*.ts` (see `LYS_FILE_FORMAT.md`).
+//! Rafts ("foundations") of `.lys` objects, ported from Lychee's `foundation/*.ts` (see `docs/formats/LYS_FILE_FORMAT.md`).
 //!
 //! A raft is switched on per object (`foundation.enabled`) and has a `type`: `cylinder`, `cube`, `rectangle`, `grid`,
 //! `triangle`, `vectoriel`, `vectorielWall`, `pixelate` or `pixelateRound`. All of them are built in the object's own

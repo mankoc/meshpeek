@@ -3,7 +3,7 @@
 //!     meshpeek-bench [--cpu] [--size 1600x1000] [--frames 60] <files...>
 //!
 //! Prints load time, upload time, median/p90 frame time and process memory (comparable with the Python
-//! benchmark in the migration plan).
+//! version's benchmark, branch `python`).
 
 use std::path::PathBuf;
 use std::sync::Arc;

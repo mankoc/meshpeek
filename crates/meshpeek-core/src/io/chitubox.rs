@@ -1,6 +1,6 @@
 //! CHITUBOX project files (`.chitubox`): the models of a CHITUBOX scene with their supports.
 //!
-//! The format is not published; `CHITUBOX_FILE_FORMAT.md` specifies it (reverse-engineered from sample files).
+//! The format is not published; `docs/formats/CHITUBOX_FILE_FORMAT.md` specifies it (reverse-engineered from sample files).
 //! In short, all little-endian:
 //!
 //! - header: magic `0xAB231243`, number of objects, offset of the object table (then the preview and, in newer

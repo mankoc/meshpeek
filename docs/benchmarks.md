@@ -1,7 +1,7 @@
 # MeshPeek benchmarks
 
 Machine: Windows 11, NVIDIA GeForce RTX 3070. Rust numbers from `meshpeek-bench` / `meshpeek-info`
-(release build); Python numbers from the benchmark in the migration plan (branch `python`).
+(release build); Python numbers from the earlier Python version (branch `python`).
 "Process memory" is the whole process, including the GPU driver's share.
 
 ## Sample scene: bust `.lys` + pilone OBJ + benchy STL (3.27M triangles, 1600×1000)

@@ -1,5 +1,5 @@
 //! Support geometry from Lychee's parametric support records, ported from Lychee's own `SupportTip.ts`,
-//! `SupportBase.ts`, `SupportMiddle.ts` and `CapsuleBufferGeometry.ts` (see `LYS_FILE_FORMAT.md`, section 9.3).
+//! `SupportBase.ts`, `SupportMiddle.ts` and `CapsuleBufferGeometry.ts` (see `docs/formats/LYS_FILE_FORMAT.md`, section 9.3).
 //!
 //! A support is a chain of **capsules** (the hull of two spheres whose centres are the chain's points, an end
 //! optionally cut flat):

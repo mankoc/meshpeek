@@ -49,7 +49,23 @@ button 1 fits all, button 2 shows the isometric view. Sensitivity and axis inver
 
 ## Build
 
-Install Rust first (see Appendix A of `docs/RUST_MIGRATION_PLAN.md`; Git LFS is needed for the sample models).
+Install Rust and Git LFS first (Git LFS is needed for the sample models):
+
+- **Windows 10/11** (PowerShell; Rust links with Microsoft's C++ build tools):
+  ```powershell
+  winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+  winget install Rustlang.Rustup
+  winget install GitHub.GitLFS
+  git lfs install
+  ```
+  Then open a new terminal so `cargo` is on the `PATH`.
+- **Linux (Ubuntu/Debian)**:
+  ```bash
+  sudo apt install build-essential pkg-config libx11-dev libxkbcommon-dev libwayland-dev libgtk-3-dev mesa-vulkan-drivers git-lfs
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  git lfs install
+  ```
+  `libgtk-3-dev` is for the file dialogs; `mesa-vulkan-drivers` provides the software renderer used in CPU mode.
 
 Day-to-day development:
 
@@ -97,9 +113,9 @@ Windows and Ubuntu machines and attaches them to the run. Tick *publish* to also
 | `crates/meshpeek-tools` | `meshpeek-info`, `lys-dump`, `meshpeek-bench`, `meshpeek-gen`. |
 | `samples/` | Sample models (Git LFS) and the reference data the golden tests compare against. |
 | `scripts/` | Build and packaging scripts. |
-| `docs/` | Migration plan, benchmarks, manual test checklist. |
-| `LYS_FILE_FORMAT.md` | Lychee `.lys` format notes. |
-| `CHITUBOX_FILE_FORMAT.md` | CHITUBOX `.chitubox` project format specification (reverse-engineered). |
+| `docs/` | Benchmarks, manual test checklist, to-do list. |
+| `docs/formats/LYS_FILE_FORMAT.md` | Lychee `.lys` format notes. |
+| `docs/formats/CHITUBOX_FILE_FORMAT.md` | CHITUBOX `.chitubox` project format specification (reverse-engineered). |
 
 The original Python implementation is kept on the `python` branch.
 

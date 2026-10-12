@@ -1,4 +1,4 @@
-//! Lychee Slicer `.lys` scenes. Format notes: `LYS_FILE_FORMAT.md` at the repository root.
+//! Lychee Slicer `.lys` scenes. Format notes: `docs/formats/LYS_FILE_FORMAT.md`.
 
 pub mod codec;
 pub mod container;
