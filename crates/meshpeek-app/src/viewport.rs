@@ -54,6 +54,8 @@ pub struct Viewport {
     rendered: Option<(Camera, [u32; 2])>,
     /// Height of the view in points, for converting pan speeds.
     height: f64,
+    /// Mouse orbit around the world's vertical axis (turntable) instead of the view's axes (trackball).
+    pub turntable: bool,
 }
 
 impl Viewport {
@@ -65,7 +67,13 @@ impl Viewport {
             texture: None,
             rendered: None,
             height: 600.0,
+            turntable: true,
         }
+    }
+
+    /// Pan by pixels of the view (test hook for the snapshot actions).
+    pub fn pan_pixels(&mut self, dx: f64, dy: f64) {
+        self.camera.pan(dx, dy, self.height);
     }
 
     /// Frame the centred object if there is one, otherwise everything.
@@ -284,7 +292,12 @@ impl Viewport {
             {
                 self.camera.pan(dx, dy, h);
             } else if response.dragged_by(egui::PointerButton::Primary) {
-                self.camera.orbit_turntable(-200.0 * dx / w, -200.0 * dy / h); // a full-width drag turns 200 degrees
+                // a full-width drag turns 200 degrees, like VTK
+                if self.turntable {
+                    self.camera.orbit_turntable(-200.0 * dx / w, -200.0 * dy / h);
+                } else {
+                    self.camera.orbit(-200.0 * dx / w, -200.0 * dy / h);
+                }
             } else if response.dragged_by(egui::PointerButton::Secondary) {
                 self.camera.dolly(1.01f64.powf(-dy));
             }

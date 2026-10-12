@@ -474,6 +474,17 @@ are not readable.
   yaw: with a 49.5° yaw, a foot stored at (24, −24) stands at (33.84, 2.65)).
 - Supports **with** `isBaseTip` branch off another support: `base` is in the base object's space
   (`objectIdBase`) and lies exactly on the parent support's column.
+- A branch **without `parentBaseId`** starts on the model itself, not on another support: its `base` is the contact
+  point on the surface (in the base object's space) and `baseNormal` points away from it. It gets a **base cone**
+  from `settings.baseTip` (`pointDiameter` at the surface widening to `diameter` over `length`), mirroring the tip
+  cone.
+- **Mini supports** (`mini: true`, always branches) are short bridges: from a point on the model (no
+  `parentBaseId`) or from another support's column to a point on the model. Their `base` and `tip` are a few mm
+  apart and the two cones (`baseTip.length` + `tip.length`) are longer than that gap (in the Irilya sample 102 of
+  104 parentless minis; none of the normal supports). Lychee draws a mini as a **thin uniform rod** from start to
+  tip, including a mini that starts on another mini: its thickness is `settings.extra.baseTipPointDiameter2` at
+  the start and `extra.tipPointDiameter2` at the tip (0.5 and 0.6 mm in a "medium" preset, 0.3 in "light", 1 in
+  "heavy"), not the full column `diameter`. The measured rod width in a Lychee screenshot (about 0.55 mm) matches.
 - Supports with **`parentTipId`** are braces: their tip lies exactly on another support's column (no tip cone).
 - Shape: foot (`base.diameter`, `base.length`; a small foot for `isSupportGrid` objects) → vertical column up
   to the knee at `base.length + base.joinLength` along `baseNormal` → angled column to the end of the tip cone →

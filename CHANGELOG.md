@@ -10,10 +10,15 @@ All notable changes to MeshPeek, newest first.
 - A manual **Build exe** GitHub workflow that builds only the Windows executable.
 
 ### Changed
-- **Mouse orbit** is now a turntable: dragging sideways turns the model around the vertical (Z) axis instead of the
-  current view axis, dragging up/down tilts, the horizon stays level and the view cannot flip over the poles.
+- **Mouse orbit** is now a turntable by default: dragging sideways turns the model around the vertical (Z) axis
+  instead of the current view axis, dragging up/down tilts, the horizon stays level and the view cannot flip over
+  the poles. *Preferences → Mouse orbit* switches back to the previous trackball orbit.
 
 ### Fixed
+- **Mini supports** (short bridges, also those that start on another support) are drawn as the thin uniform rods
+  Lychee shows, as thick as their own `extra` point diameters, instead of bent, blunt-ended full-size tubes.
+- **Supports that start on the model** (a branch with no parent support) now end in a thin base cone widening to
+  the column, like Lychee, instead of a flat end with the full column diameter.
 - **Rotated `.lys` objects:** an object rotated about several axes was turned in the wrong order, and the support
   feet ignored the object's yaw, so supports hung sideways and in the wrong place. Objects and their support grids
   now match Lychee (checked on a file rotated about all three axes: every branch and brace support lands on its

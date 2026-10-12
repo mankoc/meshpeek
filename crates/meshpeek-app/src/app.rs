@@ -11,7 +11,7 @@ use meshpeek_render::{ObjectId, Palette, Style};
 
 use crate::help;
 use crate::loading::{self, LoadResult};
-use crate::settings::{MATERIALS, SUPPORT_DETAIL, Settings, THEMES, material, rgb};
+use crate::settings::{MATERIALS, ORBIT_STYLES, SUPPORT_DETAIL, Settings, THEMES, material, rgb};
 use crate::sources::{self, Node};
 use crate::spacemouse::{self, Motion};
 use crate::viewport::{View, Viewport};
@@ -797,6 +797,9 @@ impl MeshPeekApp {
                 ui.label("Theme:");
                 combo(ui, "theme", &mut draft.theme, &THEMES);
                 ui.end_row();
+                ui.label("Mouse orbit:");
+                combo(ui, "mouse orbit", &mut draft.mouse_orbit, &ORBIT_STYLES);
+                ui.end_row();
                 ui.label("LYS files:");
                 ui.checkbox(&mut draft.show_plate, "Show build plate");
                 ui.end_row();
@@ -969,6 +972,8 @@ impl eframe::App for MeshPeekApp {
         }
         egui::CentralPanel::default().frame(egui::Frame::NONE).show(ctx, |ui| {
             let render_state = self.render_state.clone();
+            let settings = self.draft.as_ref().unwrap_or(&self.settings); // Preferences previews live
+            self.viewport.turntable = settings.mouse_orbit == "Turntable";
             self.viewport.ui(ui, &render_state);
         });
         self.preferences_window(ctx);
@@ -1024,7 +1029,7 @@ impl MeshPeekApp {
         }
     }
 
-    /// Test hook: `MESHPEEK_SNAPSHOT_ACTIONS="theme=Light;center=Bust;controls;guide;about;preferences"` is
+    /// Test hook: `MESHPEEK_SNAPSHOT_ACTIONS="theme=Light;center=Bust;view=Front;orbit=90,0;pan=100,0;dolly=4;controls;guide;about;preferences"` is
     /// applied once loading finished, before the snapshot.
     fn snapshot_actions(&mut self) {
         let Ok(actions) = std::env::var("MESHPEEK_SNAPSHOT_ACTIONS") else { return };
@@ -1035,6 +1040,24 @@ impl MeshPeekApp {
                     if let Some(e) = self.entries.iter().find(|e| e.name == name && e.parent.is_none()) {
                         self.viewport.center_on(e.id);
                     }
+                }
+                Some(("view", name)) => {
+                    if let Some((view, ..)) = View::ALL.iter().find(|(_, label, _)| label.eq_ignore_ascii_case(name)) {
+                        self.viewport.show_view(*view);
+                    }
+                }
+                Some(("orbit", degrees)) => {
+                    let (azimuth, elevation) = degrees.split_once(',').unwrap_or((degrees, "0"));
+                    self.viewport
+                        .camera
+                        .orbit_turntable(azimuth.parse().unwrap_or(0.0), elevation.parse().unwrap_or(0.0));
+                }
+                Some(("pan", pixels)) => {
+                    let (dx, dy) = pixels.split_once(',').unwrap_or((pixels, "0"));
+                    self.viewport.pan_pixels(dx.parse().unwrap_or(0.0), dy.parse().unwrap_or(0.0));
+                }
+                Some(("dolly", factor)) => {
+                    self.viewport.camera.dolly(factor.parse().unwrap_or(1.0));
                 }
                 _ => match action {
                     "controls" => self.show_controls = true,

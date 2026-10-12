@@ -19,6 +19,9 @@ pub const SUPPORT_DETAIL: [(&str, u32); 4] = [("Low", 6), ("Medium", 12), ("High
 
 pub const MAX_RECENT: usize = 10;
 
+/// Mouse orbit styles: turn around the world's vertical axis, or around the current view's axes.
+pub const ORBIT_STYLES: [&str; 2] = ["Turntable", "Trackball"];
+
 /// UI theme choices; "System" follows the operating system.
 pub const THEMES: [&str; 3] = ["System", "Light", "Dark"];
 
@@ -56,6 +59,8 @@ pub struct Settings {
     pub show_plate: bool,
     /// Toolbar buttons show a text label under their icon.
     pub toolbar_text: bool,
+    /// One of [`ORBIT_STYLES`].
+    pub mouse_orbit: String,
     pub space_mouse: SpaceMouseSettings,
     pub recent_files: Vec<PathBuf>,
 }
@@ -72,6 +77,7 @@ impl Default for Settings {
             theme: "System".into(),
             show_plate: true,
             toolbar_text: true,
+            mouse_orbit: "Turntable".into(),
             space_mouse: SpaceMouseSettings::default(),
             recent_files: Vec::new(),
         }
@@ -105,6 +111,9 @@ impl Settings {
         }
         if !THEMES.contains(&settings.theme.as_str()) {
             settings.theme = defaults.theme.clone();
+        }
+        if !ORBIT_STYLES.contains(&settings.mouse_orbit.as_str()) {
+            settings.mouse_orbit = defaults.mouse_orbit.clone();
         }
         settings.space_mouse.sensitivity = settings.space_mouse.sensitivity.clamp(0.1, 5.0);
         if !SUPPORT_DETAIL.iter().any(|(name, _)| *name == settings.support_detail) {
@@ -161,11 +170,13 @@ mod tests {
         let settings = Settings { model_material: "Metal".into(), model_color: [1, 2, 3], ..Settings::default() };
         let text = toml::to_string(&settings).unwrap();
         assert_eq!(Settings::from_toml(&text), settings);
-        let invalid =
-            Settings::from_toml("support_material = \"Chrome\"\nsupport_detail = \"Ultra\"\ntheme = \"Neon\"\n");
+        let invalid = Settings::from_toml(
+            "support_material = \"Chrome\"\nsupport_detail = \"Ultra\"\ntheme = \"Neon\"\nmouse_orbit = \"Spin\"\n",
+        );
         assert_eq!(invalid.support_material, "Plastic");
         assert_eq!(invalid.support_detail, "Medium");
         assert_eq!(invalid.theme, "System");
+        assert_eq!(invalid.mouse_orbit, "Turntable");
         let spacemouse = Settings::from_toml("[space_mouse]\nsensitivity = 50.0\ninvert_zoom = true\n");
         assert_eq!(spacemouse.space_mouse.sensitivity, 5.0); // clamped
         assert!(spacemouse.space_mouse.invert_zoom && spacemouse.space_mouse.enabled);

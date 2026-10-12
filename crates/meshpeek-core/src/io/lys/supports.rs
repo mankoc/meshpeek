@@ -2,7 +2,10 @@
 //!
 //! A plate support is drawn as: foot -> vertical column up to the knee (`base.length + base.joinLength` above
 //! the plate, along `baseNormal`) -> angled column to the end of the tip cone -> tip cone touching the model.
-//! A branch support (`isBaseTip`) starts on its parent's column and runs to its own tip cone.
+//! A branch support (`isBaseTip`) starts on its parent's column and runs to its own tip cone; without a parent
+//! (`parentBaseId` unset) it starts on the model, with a base cone (`settings.baseTip`) mirroring the tip cone.
+//! A "mini" support (`mini`, always a branch) is drawn as one thin needle from its start (on the model or on
+//! another support) to its tip, as thick as the `extra.baseTipPointDiameter2` / `extra.tipPointDiameter2` values.
 //! A brace (`parentTipId` set) has its tip on another support instead of the model: plain cylinder, no cone.
 //! Bends (knee, tip cone end) get a sphere so the joints look rounded instead of cut. Only the part of each
 //! sphere outside both adjoining segments is kept; branch starts need none (they sit inside the parent).
@@ -109,27 +112,56 @@ pub fn build(
         let settings = get(s, "settings");
         let tip_cfg = settings.and_then(|c| get(c, "tip"));
         let base_cfg = settings.and_then(|c| get(c, "base"));
+        let base_tip_cfg = settings.and_then(|c| get(c, "baseTip"));
         let cfg = |c: Option<&Value>, key: &str, default: f64| c.map_or(default, |c| number(c, key, default));
         let column_radius = cfg(tip_cfg, "diameter", 1.0) / 2.0;
 
         let tip = tip_matrix.transform_point3(vec3(get(s, "tip"), 0.0));
         let brace = truthy(s, "parentTipId"); // tip rests on another support (checked: exactly on its column)
-        let tip_end = if brace {
+        let base_id = str_of(s, "objectIdBase").filter(|id| transforms.contains_key(id)).unwrap_or(tip_id);
+        let is_branch = truthy(s, "isBaseTip");
+        // A branch without `parentBaseId` starts on the model itself.
+        let on_model = is_branch && str_of(s, "parentBaseId").is_none();
+        let base_matrix = transforms[base_id];
+        let branch_start = base_matrix.transform_point3(vec3(get(s, "base"), 0.0)); // meaningful for branches only
+
+        let tip_length = cfg(tip_cfg, "length", 3.0);
+        let base_cone_length = cfg(base_tip_cfg, "length", 3.0);
+        // A "mini" support is a short bridge between two nearby points (on the model, or from another support's
+        // column to the model). Its cones would be longer than the gap, and Lychee shows just a thin needle, as thick
+        // as the mini's own point diameters (`settings.extra`, the "2" values) and not the full column size.
+        let bridge = is_branch && truthy(s, "mini");
+        let tip_end = if brace || bridge {
             tip
         } else {
             let normal = unit(tip_matrix.transform_vector3(vec3(get(s, "tipNormal"), 0.0)), -DVec3::Z);
-            let end = tip + normal * cfg(tip_cfg, "length", 3.0);
+            let end = tip + normal * tip_length;
             segment(tip, end, cfg(tip_cfg, "pointDiameter", 0.4) / 2.0, column_radius, true, false);
             end
         };
 
-        let base_id = str_of(s, "objectIdBase").filter(|id| transforms.contains_key(id)).unwrap_or(tip_id);
-        if truthy(s, "isBaseTip") {
-            // Branch: starts on the parent support's column.
-            let branch_start = transforms[base_id].transform_point3(vec3(get(s, "base"), 0.0));
-            segment(branch_start, tip_end, column_radius, column_radius, false, false);
+        if bridge {
+            let extra = settings.and_then(|c| get(c, "extra"));
+            let start_radius = cfg(extra, "baseTipPointDiameter2", cfg(base_tip_cfg, "pointDiameter", 0.4)) / 2.0;
+            let end_radius = cfg(extra, "tipPointDiameter2", cfg(tip_cfg, "pointDiameter", 0.4)) / 2.0;
+            segment(branch_start, tip, start_radius, end_radius, on_model, true);
+        } else if is_branch {
+            // Branch: starts on the parent support's column, or on the model itself, where it gets a base cone
+            // like the tip cone: thin point on the surface widening to the column.
+            let mut start = branch_start;
+            if on_model {
+                let normal = unit(base_matrix.transform_vector3(vec3(get(s, "baseNormal"), 0.0)), DVec3::Z);
+                start = branch_start + normal * base_cone_length;
+                let point_radius = cfg(base_tip_cfg, "pointDiameter", 0.4) / 2.0;
+                let end_radius = cfg(base_tip_cfg, "diameter", 2.0 * column_radius) / 2.0;
+                segment(branch_start, start, point_radius, end_radius, true, false);
+            }
+            segment(start, tip_end, column_radius, column_radius, false, false);
             if !brace {
-                joint(tip_end, column_radius, tip, branch_start);
+                joint(tip_end, column_radius, tip, start);
+            }
+            if on_model {
+                joint(start, column_radius, branch_start, tip_end);
             }
         } else {
             let base_obj = objects.get(base_id).copied();
