@@ -55,7 +55,7 @@ Packages are built with the scripts in `scripts/` (the GitHub workflow uses the 
 
 ```powershell
 .\scripts\build.ps1 -InstallTools   # first time only: installs WiX Toolset 3 and cargo-wix
-.\scripts\build.ps1                 # checks + MeshPeek-<version>-windows-x64.zip + MeshPeek-<version>-x86_64.msi
+.\scripts\build.ps1                 # checks + MeshPeek-<version>-windows-x64.exe/.zip + MeshPeek-<version>-x86_64.msi
 .\scripts\build.ps1 -SkipTests      # same, without format/lint/test checks
 .\scripts\build.ps1 -Check          # only the checks
 ```

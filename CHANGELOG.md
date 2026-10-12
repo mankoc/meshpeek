@@ -8,6 +8,7 @@ All notable changes to MeshPeek, newest first.
 - **Raft:** `.lys` scenes that have the raft switched on now show it: a flat disc under every foot, joined by bars
   to the neighbouring feet. Lychee does not store the raft's shape, so this is an approximation.
 - A manual **Build exe** GitHub workflow that builds only the Windows executable.
+- Releases now also include the **bare `meshpeek.exe`** (no archive, no installer), next to the zip and the MSI.
 
 ### Changed
 - **Mouse orbit** is now a turntable by default: dragging sideways turns the model around the vertical (Z) axis

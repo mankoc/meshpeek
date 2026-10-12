@@ -4,6 +4,7 @@
 
 .DESCRIPTION
     Runs the checks (format, lint, tests), builds the release executable and writes to dist\:
+      - MeshPeek-<version>-windows-x64.exe   the bare executable: just run it
       - MeshPeek-<version>-windows-x64.zip   portable: unzip and run meshpeek.exe
       - MeshPeek-<version>-x86_64.msi        installer (only if WiX Toolset 3 and cargo-wix are installed)
 
@@ -87,6 +88,9 @@ Copy-Item target\release\meshpeek.exe, target\release\THIRD-PARTY-LICENSES.html,
 Compress-Archive -Path "$Stage\*" -DestinationPath "$Dist\$Name.zip" -Force
 Remove-Item -Recurse -Force $Stage
 Write-Host "    $Dist\$Name.zip"
+# the bare executable too, for people who want neither an archive nor an installer
+Copy-Item target\release\meshpeek.exe "$Dist\$Name.exe"
+Write-Host "    $Dist\$Name.exe"
 
 if (-not $NoMsi) {
     Step "Building MSI installer"
