@@ -100,7 +100,9 @@ pub const GUIDE: &[(&str, &[&str])] = &[
     ),
     (
         "Graphics card and performance",
-        &["MeshPeek draws with the graphics card. Without a usable one it falls back to software rendering              (start with --cpu to force it); Help > About shows which is in use. Very large models stay fast on              a graphics card; in software mode they work but move slowly. Lowering the support detail helps              with large supported scenes."],
+        &[
+            "MeshPeek draws with the graphics card. Without a usable one it falls back to software rendering              (start with --cpu to force it); Help > About shows which is in use. Very large models stay fast on              a graphics card; in software mode they work but move slowly. Lowering the support detail helps              with large supported scenes.",
+        ],
     ),
 ];
 
