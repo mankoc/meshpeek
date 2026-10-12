@@ -3,16 +3,21 @@
 
 use glam::{DQuat, DVec3, Mat4};
 
+/// A perspective camera looking from `position` at `focal`, the point it orbits and zooms towards.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {
+    /// Eye position in world coordinates.
     pub position: DVec3,
+    /// Point looked at; orbiting turns around it.
     pub focal: DVec3,
+    /// Screen-up direction (kept perpendicular to the viewing direction).
     pub up: DVec3,
     /// Vertical field of view in degrees (VTK's default is 30).
     pub fov_y: f64,
 }
 
 impl Default for Camera {
+    /// Isometric view of the origin from 100 units away.
     fn default() -> Self {
         let mut camera = Self { position: DVec3::ZERO, focal: DVec3::ZERO, up: DVec3::Z, fov_y: 30.0 };
         camera.view_from(DVec3::new(1.0, 1.0, 1.0), DVec3::Z, 100.0);
@@ -21,6 +26,7 @@ impl Default for Camera {
 }
 
 impl Camera {
+    /// Distance from the eye to the focal point.
     pub fn distance(&self) -> f64 {
         (self.position - self.focal).length()
     }
@@ -30,6 +36,7 @@ impl Camera {
         (self.focal - self.position).normalize_or(-DVec3::Z)
     }
 
+    /// Unit vector pointing to the right of the screen.
     fn right(&self) -> DVec3 {
         self.direction().cross(self.up).normalize_or(DVec3::X)
     }
@@ -67,6 +74,7 @@ impl Camera {
         self.orthogonalize_up();
     }
 
+    /// Make `up` perpendicular to the viewing direction again (after a rotation), keeping its screen side.
     fn orthogonalize_up(&mut self) {
         let direction = self.direction();
         self.up = self.right().cross(direction).normalize_or(DVec3::Z);
@@ -116,14 +124,7 @@ impl Camera {
         let direction = self.direction();
         let (mut near, mut far) = (self.distance() * 0.01, self.distance() * 100.0);
         if let Some((low, high)) = scene {
-            let corners = (0..8).map(|i| {
-                DVec3::new(
-                    if i & 1 == 0 { low.x } else { high.x },
-                    if i & 2 == 0 { low.y } else { high.y },
-                    if i & 4 == 0 { low.z } else { high.z },
-                )
-            });
-            let depths: Vec<f64> = corners.map(|c| (c - self.position).dot(direction)).collect();
+            let depths = crate::box_corners(low, high).map(|c| (c - self.position).dot(direction));
             let farthest = depths.iter().copied().fold(f64::MIN, f64::max).max(1e-3) * 1.02;
             let nearest = depths.iter().copied().fold(f64::MAX, f64::min) * 0.98;
             far = farthest;

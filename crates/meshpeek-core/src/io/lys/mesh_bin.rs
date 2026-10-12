@@ -6,8 +6,10 @@
 use crate::error::{LoadError, Result};
 use crate::mesh::Mesh;
 
+/// Bytes before the index data.
 pub const HEADER_SIZE: usize = 20;
 
+/// Parse a mesh member, checking its size against the header and its indices against the vertex count.
 pub fn parse(raw: &[u8]) -> Result<Mesh> {
     if raw.len() < HEADER_SIZE {
         return Err(LoadError::format("mesh member too short"));

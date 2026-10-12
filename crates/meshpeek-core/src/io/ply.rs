@@ -6,6 +6,7 @@ use crate::error::{LoadError, Result};
 use crate::io::{fan, map_file};
 use crate::mesh::Mesh;
 
+/// Load a PLY file.
 pub fn load(path: &Path) -> Result<Mesh> {
     load_bytes(&map_file(path)?, path)
 }
@@ -15,6 +16,7 @@ pub fn load_bytes(data: &[u8], path: &Path) -> Result<Mesh> {
     parse(data).map_err(|e| LoadError::format(format!("{}: {e}", path.display())))
 }
 
+/// Body encoding named in the header.
 #[derive(Clone, Copy, PartialEq)]
 enum Format {
     Ascii,
@@ -22,6 +24,7 @@ enum Format {
     Big,
 }
 
+/// Numeric property types.
 #[derive(Clone, Copy)]
 enum Scalar {
     I8,
@@ -35,6 +38,7 @@ enum Scalar {
 }
 
 impl Scalar {
+    /// The type for a header type name (`uchar`, `float32`, …).
     fn parse(name: &str) -> Option<Self> {
         Some(match name {
             "char" | "int8" => Self::I8,
@@ -49,6 +53,7 @@ impl Scalar {
         })
     }
 
+    /// Size in bytes in a binary body.
     fn size(self) -> usize {
         match self {
             Self::I8 | Self::U8 => 1,
@@ -59,12 +64,14 @@ impl Scalar {
     }
 }
 
+/// One `property` line of an element.
 struct Property {
     name: String,
     scalar: Scalar,
     list_count: Option<Scalar>, // Some(count type) for list properties
 }
 
+/// One `element` of the header (e.g. `vertex 1000`) with its properties.
 struct Element {
     name: String,
     count: usize,
@@ -79,6 +86,7 @@ struct Reader<'a> {
 }
 
 impl Reader<'_> {
+    /// The next value, of type `scalar` in a binary body (any number in an ASCII one), as `f64`.
     fn value(&mut self, scalar: Scalar) -> std::result::Result<f64, String> {
         if self.format == Format::Ascii {
             while self.pos < self.data.len() && self.data[self.pos].is_ascii_whitespace() {
@@ -111,6 +119,8 @@ impl Reader<'_> {
     }
 }
 
+/// Parse a PLY file: `x y z` (and `red green blue` when present) of the `vertex` element and the
+/// `vertex_indices` list of `face` (polygons are fan-triangulated). Other elements are read past.
 pub fn parse(data: &[u8]) -> std::result::Result<Mesh, String> {
     let end = memchr::memmem::find(data, b"end_header").ok_or("missing end_header")?;
     let body_start = memchr::memchr(b'\n', &data[end..]).map(|i| end + i + 1).ok_or("missing end_header line")?;
@@ -166,6 +176,7 @@ pub fn parse(data: &[u8]) -> std::result::Result<Mesh, String> {
     Ok(mesh)
 }
 
+/// The body format and the elements declared in the header text (up to `end_header`).
 fn parse_header(header: &str) -> std::result::Result<(Format, Vec<Element>), String> {
     let mut lines = header.lines();
     if lines.next().map(str::trim) != Some("ply") {

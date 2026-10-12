@@ -9,12 +9,15 @@ use std::path::{Path, PathBuf};
 use meshpeek_core::SUPPORTED_EXTENSIONS;
 use meshpeek_core::io::extension;
 
+/// Archive extensions whose models can be listed and opened.
 pub const ARCHIVE_EXTENSIONS: &[&str] = &["zip", "7z", "rar"];
 
+/// `path` names an archive MeshPeek can open.
 pub fn is_archive(path: &Path) -> bool {
     ARCHIVE_EXTENSIONS.contains(&extension(path).as_str())
 }
 
+/// `path` names a model file MeshPeek can load.
 pub fn is_model(path: &Path) -> bool {
     SUPPORTED_EXTENSIONS.contains(&extension(path).as_str())
 }
@@ -30,6 +33,7 @@ pub enum Source {
 }
 
 impl Source {
+    /// The file path, or the name inside the archive for unpacked members.
     pub fn path(&self) -> &Path {
         match self {
             Self::Disk(path) | Self::Memory { name: path, .. } => path,
@@ -82,6 +86,7 @@ fn models_in(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
+/// Call `visit` for every file under `dir`, recursively.
 fn walk(dir: &Path, visit: &mut impl FnMut(&Path)) {
     let Ok(read) = std::fs::read_dir(dir) else { return };
     for entry in read.flatten() {
@@ -94,6 +99,7 @@ fn walk(dir: &Path, visit: &mut impl FnMut(&Path)) {
     }
 }
 
+/// An archive member name with forward slashes.
 fn normal(name: &str) -> String {
     name.replace('\\', "/")
 }
@@ -178,6 +184,7 @@ pub struct Node {
 }
 
 impl Node {
+    /// Folders first, then by name, case-insensitively, at every level.
     fn sort(&mut self) {
         self.children.iter_mut().for_each(Node::sort);
         self.children.sort_by_key(|n| (!n.is_dir, n.path.to_string_lossy().to_lowercase()));

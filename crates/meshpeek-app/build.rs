@@ -1,5 +1,6 @@
 //! Embed the icon and version information into the Windows executable.
 
+/// Embed the application icon and version info in the Windows executable.
 fn main() {
     println!("cargo:rerun-if-changed=assets/icon.ico");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {

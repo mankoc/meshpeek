@@ -17,14 +17,19 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 
 /// Latest motion and buttons, shared between the reader thread and the UI.
+/// Deflection of the cap, each axis in about -1..1.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct Motion {
+    /// Push/pull along x, y, z.
     pub translation: [f32; 3],
+    /// Twist about x, y, z.
     pub rotation: [f32; 3],
 }
 
+/// What the reader thread last saw.
 #[derive(Debug, Default)]
 pub struct State {
+    /// Current deflection.
     pub motion: Motion,
     /// When `motion` was last updated: a device that stops reporting is treated as centred.
     pub updated: Option<Instant>,
@@ -34,6 +39,7 @@ pub struct State {
     pub device: Option<String>,
 }
 
+/// State shared between the reader thread and the UI.
 pub type Shared = Arc<Mutex<State>>;
 
 /// Motion older than this is ignored (some devices send nothing while the cap is at rest).
@@ -102,6 +108,7 @@ pub fn hid_to_motion(v: [i16; 3]) -> [f32; 3] {
     [v[0] as f32, -(v[2] as f32), -(v[1] as f32)]
 }
 
+/// Change the shared state and ask the UI to repaint.
 fn update(state: &Shared, ctx: &egui::Context, change: impl FnOnce(&mut State)) {
     let mut s = state.lock().unwrap();
     change(&mut s);
@@ -110,6 +117,7 @@ fn update(state: &Shared, ctx: &egui::Context, change: impl FnOnce(&mut State)) 
     ctx.request_repaint();
 }
 
+/// 3Dconnexion devices read directly over HID.
 mod hid {
     use super::*;
 
@@ -148,6 +156,7 @@ mod hid {
     }
 }
 
+/// The spacenavd daemon (Linux), read over its Unix socket.
 #[cfg(unix)]
 mod spacenavd {
     use std::io::Read;
@@ -155,6 +164,7 @@ mod spacenavd {
 
     use super::*;
 
+    /// Where spacenavd listens.
     const SOCKET: &str = "/var/run/spnav.sock";
 
     /// Events from spacenavd: eight native-endian i32. Motion: [0, x, y, z, rx, ry, rz, period];
@@ -170,6 +180,7 @@ mod spacenavd {
         }
     }
 
+    /// Read events until the daemon goes away; returns false if it is not running.
     pub fn run(state: &Shared, ctx: &egui::Context) -> bool {
         let Ok(mut stream) = UnixStream::connect(SOCKET) else { return false };
         log::info!("space mouse: spacenavd");

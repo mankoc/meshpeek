@@ -110,6 +110,8 @@ fn object_raft(object: Option<&Value>, mesh: &Mesh, feet: Option<Vec<RaftFoot>>,
     (raft.n_faces() > 0).then_some(raft)
 }
 
+/// Load a `.lys` scene: its models, their supports (with `support_sides` facets round) and rafts, and the
+/// build plate.
 pub fn load(file: &Path, support_sides: u32) -> Result<Scene> {
     load_data(file, Data::Mapped(map_file(file)?), support_sides)
 }

@@ -53,8 +53,8 @@ const FILL = 0.25;  // key / 3
 const BACK = 0.2143; // key / 3.5
 const HEAD = 0.25;  // key / 3
 
-fn light(n: vec3<f32>, v: vec3<f32>, dir: vec3<f32>, intensity: f32, power: f32) -> vec2<f32> {
-    let l = normalize(dir);
+// `l` must be a unit vector (the directions above are).
+fn light(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, intensity: f32, power: f32) -> vec2<f32> {
     let diffuse = max(dot(n, l), 0.0) * intensity;
     let h = normalize(l + v);
     let specular = pow(max(dot(n, h), 0.0), power) * intensity;

@@ -15,16 +15,19 @@ pub fn path<'a>(value: &'a Value, dotted: &str) -> Option<&'a Value> {
     dotted.split('.').try_fold(value, get)
 }
 
+/// A number (float or integer) as `f64`, or `default` when missing or not a number.
 pub fn f64_or(value: Option<&Value>, default: f64) -> f64 {
     value
         .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)).or_else(|| v.as_u64().map(|u| u as f64)))
         .unwrap_or(default)
 }
 
+/// The number at `key` of a map, or `default`.
 pub fn number(value: &Value, key: &str, default: f64) -> f64 {
     f64_or(get(value, key), default)
 }
 
+/// The string at `key` of a map.
 pub fn str_of<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     get(value, key)?.as_str()
 }

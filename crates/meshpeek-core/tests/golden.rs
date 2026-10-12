@@ -9,18 +9,22 @@ use glam::DVec3;
 use meshpeek_core::{LoadOptions, ObjectKind, Scene, load};
 use serde_json::Value;
 
+/// The `samples` folder at the repository root.
 fn samples() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../samples")
 }
 
+/// The sample exists and is real content, not a Git LFS pointer.
 fn available(path: &Path) -> bool {
     std::fs::read(path).is_ok_and(|b| !b.starts_with(b"version https://git-lfs"))
 }
 
+/// `a` is within a relative `tolerance` of `b`.
 fn close(a: f64, b: f64, tolerance: f64) -> bool {
     (a - b).abs() <= tolerance * (1.0 + b.abs())
 }
 
+/// Compare a vector with a JSON array of three numbers.
 fn check_vec(label: &str, got: [f64; 3], want: &Value, tolerance: f64) {
     for i in 0..3 {
         let w = want[i].as_f64().unwrap();
@@ -28,6 +32,7 @@ fn check_vec(label: &str, got: [f64; 3], want: &Value, tolerance: f64) {
     }
 }
 
+/// Compare a loaded scene object by object with its reference dump.
 fn check_scene(name: &str, scene: &Scene, reference: &Value) {
     let objects = reference["objects"].as_array().unwrap();
     assert_eq!(scene.objects.len(), objects.len(), "{name}: object count");
@@ -72,6 +77,7 @@ fn check_scene(name: &str, scene: &Scene, reference: &Value) {
     }
 }
 
+/// Every reference dump in `samples/reference` matches what the loaders produce.
 #[test]
 fn matches_python_reference() {
     let reference_dir = samples().join("reference");

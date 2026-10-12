@@ -10,8 +10,10 @@ use glam::DVec3;
 use meshpeek_core::{LoadOptions, Mesh, ObjectKind, load};
 use meshpeek_render::{Camera, GpuMesh, Material, Renderer, Style};
 
+/// The app's default model material.
 const PLASTIC: Material = Material { ambient: 0.1, diffuse: 0.8, specular: 0.3, specular_power: 20.0 };
 
+/// A device on the default adapter, or the software one; `None` without any.
 fn device() -> Option<(wgpu::Device, wgpu::Queue, wgpu::Adapter)> {
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
     let adapter =
@@ -33,12 +35,14 @@ fn device() -> Option<(wgpu::Device, wgpu::Queue, wgpu::Adapter)> {
     Some((device, queue, adapter))
 }
 
+/// Save the image as PNG under `MESHPEEK_RENDER_OUT`, if set.
 fn save(name: &str, pixels: &[u8], size: [u32; 2]) {
     if let Ok(dir) = std::env::var("MESHPEEK_RENDER_OUT") {
         image::save_buffer(Path::new(&dir).join(name), pixels, size[0], size[1], image::ColorType::Rgba8).unwrap();
     }
 }
 
+/// A unit cube, 12 triangles.
 fn cube() -> Mesh {
     let corners: Vec<[f32; 3]> =
         (0..8).map(|i| [(i & 1) as f32 * 10.0, ((i >> 1) & 1) as f32 * 10.0, ((i >> 2) & 1) as f32 * 10.0]).collect();
@@ -59,6 +63,7 @@ fn cube() -> Mesh {
     Mesh::new(corners, faces)
 }
 
+/// The cube covers the centre of the image and the gradient shows round it.
 #[test]
 fn renders_a_cube_over_the_background() {
     let Some((device, queue, adapter)) = device() else {
@@ -87,6 +92,7 @@ fn renders_a_cube_over_the_background() {
     assert!(at(100, 40)[0] > 140, "top face should be lit: {:?}", at(100, 40));
 }
 
+/// The sample scene renders with its supports.
 #[test]
 fn renders_the_bust_sample_with_supports() {
     let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../samples/Favorite_BUST - Lychee.lys");
@@ -117,6 +123,7 @@ fn renders_the_bust_sample_with_supports() {
     assert!(orange > 1000, "supports not visible ({orange} orange pixels)");
 }
 
+/// The light palette changes the background.
 #[test]
 fn light_palette_gives_a_light_background() {
     let Some((device, queue, adapter)) = device() else {

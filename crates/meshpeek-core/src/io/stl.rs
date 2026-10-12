@@ -11,6 +11,7 @@ use crate::mesh::Mesh;
 const HEADER: usize = 84; // 80-byte comment + u32 triangle count
 const RECORD: usize = 50; // normal, 3 corners (12 floats), u16 attribute
 
+/// Load an STL file (binary or ASCII).
 pub fn load(path: &Path) -> Result<Mesh> {
     load_bytes(&map_file(path)?, path)
 }
@@ -40,6 +41,7 @@ fn is_binary(data: &[u8]) -> bool {
     }
 }
 
+/// The three corners of every triangle of a binary STL (normals and attributes are ignored).
 fn binary_corners(data: &[u8]) -> Vec<[f32; 3]> {
     let f = |b: &[u8], i: usize| f32::from_le_bytes(b[i..i + 4].try_into().unwrap());
     data[HEADER..]
@@ -48,6 +50,7 @@ fn binary_corners(data: &[u8]) -> Vec<[f32; 3]> {
         .collect()
 }
 
+/// The corners of every `vertex` line of an ASCII STL.
 fn ascii_corners(data: &[u8], path: &Path) -> Result<Vec<[f32; 3]>> {
     let text = std::str::from_utf8(data)
         .map_err(|_| LoadError::format(format!("{}: neither binary STL nor ASCII text", path.display())))?;

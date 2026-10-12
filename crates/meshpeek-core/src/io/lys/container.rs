@@ -7,9 +7,12 @@ use std::io::{Cursor, Read};
 use crate::error::{LoadError, Result};
 use crate::io::Data;
 
+/// The first bytes of a ZIP file (V1 `.lys`).
 const ZIP_MAGIC: &[u8] = b"PK\x03\x04";
 
+/// An opened `.lys` container with its member index.
 pub enum Archive {
+    /// A V1 file.
     Zip(zip::ZipArchive<Cursor<Data>>),
     /// MNGO file contents and its members: name -> (absolute offset, size).
     Mngo(Data, HashMap<String, (usize, usize)>),
@@ -21,6 +24,7 @@ impl Archive {
         Self::open(Data::Mapped(crate::io::map_file(path)?))
     }
 
+    /// Open file contents, detecting ZIP or MNGO from the first bytes.
     pub fn open(data: Data) -> Result<Self> {
         if data.starts_with(ZIP_MAGIC) {
             let zip = zip::ZipArchive::new(Cursor::new(data))
@@ -31,10 +35,12 @@ impl Archive {
         Ok(Self::Mngo(data, members))
     }
 
+    /// V1 (ZIP) file: its `scene.bin` is not ciphered.
     pub fn is_zip(&self) -> bool {
         matches!(self, Self::Zip(_))
     }
 
+    /// Member names, sorted (directories joined with `/`).
     pub fn names(&self) -> Vec<String> {
         let mut names: Vec<String> = match self {
             Self::Zip(zip) => zip.file_names().map(str::to_string).collect(),
@@ -44,6 +50,7 @@ impl Archive {
         names
     }
 
+    /// The archive has a member called `name`.
     pub fn contains(&self, name: &str) -> bool {
         match self {
             Self::Zip(zip) => zip.index_for_name(name).is_some(),
@@ -90,6 +97,7 @@ fn mngo_index(map: &[u8]) -> Result<HashMap<String, (usize, usize)>> {
     Ok(members)
 }
 
+/// Add the members of one MNGO directory node (recursing into subdirectories) to `out`.
 fn walk(
     node: &serde_json::Value,
     prefix: &str,

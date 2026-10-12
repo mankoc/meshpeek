@@ -9,7 +9,7 @@ use meshpeek_render::{Camera, ObjectId, Renderer, wgpu};
 use crate::settings::SpaceMouseSettings;
 use crate::spacemouse::Motion;
 
-/// Standard views: direction from the focal point to the camera, and view-up.
+/// Standard views.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
     Isometric,
@@ -22,6 +22,7 @@ pub enum View {
 }
 
 impl View {
+    /// Every view with its menu label and keyboard key.
     pub const ALL: [(View, &'static str, egui::Key); 7] = [
         (View::Isometric, "Isometric", egui::Key::Num0),
         (View::Front, "Front", egui::Key::Num1),
@@ -32,6 +33,7 @@ impl View {
         (View::Bottom, "Bottom", egui::Key::Num6),
     ];
 
+    /// Direction from the focal point to the camera, and view-up.
     fn direction(self) -> (DVec3, DVec3) {
         match self {
             View::Isometric => (DVec3::new(1.0, 1.0, 1.0), DVec3::Z),
@@ -45,12 +47,17 @@ impl View {
     }
 }
 
+/// The 3D view: renderer, camera and the texture egui shows.
 pub struct Viewport {
+    /// Draws the scene.
     pub renderer: Renderer,
+    /// Current point of view.
     pub camera: Camera,
     /// Object the camera is centred on and orbits (sticky across standard views), if any.
     pub focus: Option<ObjectId>,
+    /// The rendered image registered with egui.
     texture: Option<egui::TextureId>,
+    /// Camera and size of the last render, to skip rendering when nothing changed.
     rendered: Option<(Camera, [u32; 2])>,
     /// Height of the view in points, for converting pan speeds.
     height: f64,
@@ -59,6 +66,7 @@ pub struct Viewport {
 }
 
 impl Viewport {
+    /// A view with the best MSAA the adapter supports and the default camera.
     pub fn new(render_state: &RenderState) -> Self {
         Self {
             renderer: Renderer::new(&render_state.device, Renderer::best_sample_count(&render_state.adapter)),
@@ -93,11 +101,13 @@ impl Viewport {
         self.frame_target();
     }
 
+    /// Frame one object and orbit around it until another is centred or everything is framed.
     pub fn center_on(&mut self, id: ObjectId) {
         self.focus = Some(id);
         self.frame_target();
     }
 
+    /// Look along a standard view, framing the centred object (or everything).
     pub fn show_view(&mut self, view: View) {
         let (direction, up) = view.direction();
         let distance = self.camera.distance();
@@ -179,6 +189,7 @@ impl Viewport {
         true
     }
 
+    /// Handle mouse input, re-render if needed and draw the image and the gizmo into the remaining space.
     pub fn ui(&mut self, ui: &mut egui::Ui, render_state: &RenderState) {
         let rect = ui.available_rect_before_wrap();
         self.height = rect.height().max(1.0) as f64;
@@ -270,8 +281,7 @@ impl Viewport {
             }
         }
         if let Some(view) = hovered {
-            let names = ["Isometric", "Front", "Back", "Left", "Right", "Top", "Bottom"];
-            let name = View::ALL.iter().zip(names).find(|((v, _, _), _)| *v == view).map_or("", |(_, n)| n);
+            let name = View::ALL.iter().find(|(v, _, _)| *v == view).map_or("", |(_, label, _)| label);
             response.clone().on_hover_text(format!("{name} view"));
             if response.clicked() {
                 self.show_view(view);

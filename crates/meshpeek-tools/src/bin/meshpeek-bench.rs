@@ -99,6 +99,7 @@ fn main() {
     );
 }
 
+/// Physical memory used by the process, in MiB.
 fn memory_mb() -> f64 {
     memory_stats::memory_stats().map_or(0.0, |m| m.physical_mem as f64 / (1024.0 * 1024.0))
 }

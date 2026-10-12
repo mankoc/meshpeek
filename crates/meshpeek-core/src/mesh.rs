@@ -1,3 +1,5 @@
+//! The triangle mesh shared by all loaders and the renderer.
+
 use rayon::prelude::*;
 
 /// Triangle mesh as plain arrays: float32 positions and 32-bit triangle indices.
@@ -5,16 +7,21 @@ use rayon::prelude::*;
 /// `colors` holds per-vertex RGB when the file provides it.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Mesh {
+    /// Vertex positions.
     pub vertices: Vec<[f32; 3]>,
+    /// Triangles as three indices into `vertices`, counter-clockwise seen from outside.
     pub faces: Vec<[u32; 3]>,
+    /// Per-vertex colours, as long as `vertices` when present.
     pub colors: Option<Vec<[u8; 3]>>,
 }
 
 impl Mesh {
+    /// A mesh without colours.
     pub fn new(vertices: Vec<[f32; 3]>, faces: Vec<[u32; 3]>) -> Self {
         Self { vertices, faces, colors: None }
     }
 
+    /// Number of triangles.
     pub fn n_faces(&self) -> usize {
         self.faces.len()
     }

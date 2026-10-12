@@ -2,6 +2,19 @@
 
 All notable changes to MeshPeek, newest first.
 
+## 0.3.1 — 2026-10-12
+
+### Added
+- **Instant previous / next file:** once a file is shown, MeshPeek loads the previous and next model of its folder (or
+  archive) in the background, so ← / → show them at once. It costs the memory of two more models;
+  *Preferences → Arrow keys* turns it off.
+
+### Changed
+- The **user guide** (Help > User guide) is up to date: folders and archives, the arrow keys, rafts and all support
+  shapes, and the right menu for Preferences.
+- Code documentation: every public item and nearly every function has a docstring; small clean-ups (one helper
+  for box corners, the view gizmo's tooltip reuses the view names) and a slightly cheaper lighting shader.
+
 ## 0.3.0 — 2026-10-12
 
 ### Changed

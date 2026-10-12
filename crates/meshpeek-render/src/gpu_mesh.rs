@@ -5,10 +5,15 @@ use glam::Vec3;
 use meshpeek_core::Mesh;
 use wgpu::util::DeviceExt;
 
+/// Part of a mesh small enough for one set of buffers, drawn with one call.
 pub(crate) struct Chunk {
+    /// Positions, 3 x f32 per vertex.
     pub vertices: wgpu::Buffer,
+    /// RGBA8 per vertex, when the mesh has colours.
     pub colors: Option<wgpu::Buffer>,
+    /// Triangle indices, u32.
     pub indices: wgpu::Buffer,
+    /// Number of indices (three per triangle).
     pub index_count: u32,
 }
 
@@ -18,7 +23,9 @@ pub struct GpuMesh {
     pub(crate) chunks: Vec<Chunk>,
     /// Object-space bounds.
     pub bounds: Option<(Vec3, Vec3)>,
+    /// Number of triangles.
     pub triangles: usize,
+    /// The mesh has per-vertex colours (drawn with them instead of the object's colour).
     pub has_colors: bool,
 }
 
@@ -44,6 +51,7 @@ impl GpuMesh {
     }
 }
 
+/// Upload one chunk; colours are widened to RGBA because vertex formats have no 3-byte type.
 fn chunk(device: &wgpu::Device, vertices: &[[f32; 3]], colors: Option<&[[u8; 3]]>, faces: &[[u32; 3]]) -> Chunk {
     let init = |label, contents: &[u8], usage| {
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some(label), contents, usage })

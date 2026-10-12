@@ -48,7 +48,9 @@ pub fn extension(path: &Path) -> String {
 
 /// File contents: memory-mapped from disk or owned (unpacked from an archive).
 pub enum Data {
+    /// A file mapped read-only from disk.
     Mapped(Mmap),
+    /// Bytes held in memory.
     Owned(Vec<u8>),
 }
 
@@ -119,6 +121,7 @@ pub fn load_data(name: &Path, data: Data, options: &LoadOptions) -> Result<Scene
     Ok(scene)
 }
 
+/// File name of `path` without directory and extension, used as the default object name.
 pub(crate) fn stem(path: &Path) -> String {
     path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
 }
@@ -134,7 +137,7 @@ pub(crate) fn map_file(path: &Path) -> Result<Mmap> {
     unsafe { Mmap::map(&file) }.map_err(|e| LoadError::io(path, e))
 }
 
-/// Split `data` into about `parts` slices that end on line boundaries (for parallel parsing).
+/// Human-readable file size (bytes, KB or MB).
 fn format_size(bytes: u64) -> String {
     match bytes {
         b if b >= 1 << 20 => format!("{:.1} MB", b as f64 / (1u64 << 20) as f64),
@@ -143,6 +146,8 @@ fn format_size(bytes: u64) -> String {
     }
 }
 
+/// Split `data` into about `parts` slices (at least 64 KB each) that end on line boundaries, for parsing
+/// text formats in parallel.
 pub(crate) fn line_chunks(data: &[u8], parts: usize) -> Vec<&[u8]> {
     let target = (data.len() / parts.max(1)).max(1 << 16);
     let mut chunks = Vec::new();

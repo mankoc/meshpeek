@@ -32,11 +32,13 @@ pub const SIDES: u32 = 12;
 const MAX_LENGTH_BRACING: f64 = 2.0;
 const PERCENT_LENGTH_BRACING: f64 = 0.33;
 
+/// `v` normalised, or `fallback` when it is (nearly) zero.
 fn unit(v: DVec3, fallback: DVec3) -> DVec3 {
     let length = v.length();
     if length > 1e-9 { v / length } else { fallback }
 }
 
+/// A position as a mesh vertex.
 fn to_f32(p: DVec3) -> [f32; 3] {
     [p.x as f32, p.y as f32, p.z as f32]
 }
@@ -284,6 +286,7 @@ struct Settings {
 }
 
 impl Settings {
+    /// Read a support record's `settings`, with Lychee's defaults for missing values.
     fn of(support: &Value) -> Self {
         let settings = get(support, "settings");
         let part = |name: &str| settings.and_then(|s| get(s, name));

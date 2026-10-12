@@ -7,14 +7,17 @@ use glam::{DMat4, DVec3};
 use meshpeek_core::Plate;
 use wgpu::util::DeviceExt;
 
-use crate::{COLOR_FORMAT, Camera, GpuMesh};
+use crate::{COLOR_FORMAT, Camera, GpuMesh, box_corners};
 
+/// Depth buffer format.
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 /// Colours of everything that is not a model: background gradient, build plate and its outline.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Palette {
+    /// Background colour at the top of the view.
     pub background_top: [f32; 3],
+    /// Background colour at the bottom of the view.
     pub background_bottom: [f32; 3],
     /// RGB + opacity of the translucent plate floor.
     pub plate_fill: [f32; 4],
@@ -23,12 +26,14 @@ pub struct Palette {
 }
 
 impl Palette {
+    /// Colours for the dark UI theme.
     pub const DARK: Palette = Palette {
         background_top: [0.294, 0.314, 0.353],    // #4b505a
         background_bottom: [0.145, 0.153, 0.169], // #25272b
         plate_fill: [0.478, 0.518, 0.580, 0.35],  // #7a8494
         plate_outline: [0.478, 0.518, 0.580, 0.6],
     };
+    /// Colours for the light UI theme.
     pub const LIGHT: Palette = Palette {
         background_top: [0.965, 0.973, 0.984],     // #f6f8fb
         background_bottom: [0.780, 0.808, 0.851],  // #c7ced9
@@ -40,9 +45,13 @@ impl Palette {
 /// Phong-style surface parameters (same meaning as VTK's).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Material {
+    /// Share of the colour shown regardless of the lights.
     pub ambient: f32,
+    /// Strength of the matte lighting.
     pub diffuse: f32,
+    /// Strength of the white highlights.
     pub specular: f32,
+    /// Sharpness of the highlights (higher = smaller, glossier).
     pub specular_power: f32,
 }
 
@@ -51,12 +60,15 @@ pub struct Material {
 pub struct Style {
     /// Gamma-space RGB in 0..1, used when the mesh has no vertex colours.
     pub color: [f32; 3],
+    /// Lighting response.
     pub material: Material,
 }
 
+/// Handle of an object added to the [`Renderer`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ObjectId(u64);
 
+/// Per-frame shader constants (`Globals` in the shaders).
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct GlobalsUniform {
@@ -66,6 +78,7 @@ struct GlobalsUniform {
     background_bottom: [f32; 4],
 }
 
+/// Per-object shader constants (`Object` in `mesh.wgsl`).
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct ObjectUniform {
@@ -74,6 +87,7 @@ struct ObjectUniform {
     material: [f32; 4],
 }
 
+/// Vertex of the unlit overlays (plate floor, outlines, axes).
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct FlatVertex {
@@ -81,6 +95,7 @@ struct FlatVertex {
     color: [f32; 4],
 }
 
+/// A drawn instance of a mesh: placement, style and its uniform buffer.
 struct Object {
     mesh: Arc<GpuMesh>,
     model: DMat4,
@@ -90,23 +105,32 @@ struct Object {
     bind_group: wgpu::BindGroup,
 }
 
+/// The offscreen images rendered into, recreated when the view size changes.
 struct Target {
     size: [u32; 2],
+    /// Multisampled colour image, resolved into `color` (absent without MSAA).
     msaa: Option<wgpu::TextureView>,
     color: wgpu::Texture,
     color_view: wgpu::TextureView,
     depth: wgpu::TextureView,
 }
 
+/// All render pipelines, created once.
 struct Pipelines {
+    /// Lit meshes in the object's colour.
     plain: wgpu::RenderPipeline,
+    /// Lit meshes with vertex colours.
     colored: wgpu::RenderPipeline,
     wire: Option<(wgpu::RenderPipeline, wgpu::RenderPipeline)>, // (plain, colored) with PolygonMode::Line
+    /// Plate outline and origin axes.
     lines: wgpu::RenderPipeline,
+    /// Plate floor (blended, no depth writes).
     translucent: wgpu::RenderPipeline,
+    /// Full-screen gradient.
     background: wgpu::RenderPipeline,
 }
 
+/// Draws the scene offscreen; the UI shows the returned texture. Only re-renders when asked to.
 pub struct Renderer {
     sample_count: u32,
     globals: wgpu::Buffer,
@@ -189,6 +213,7 @@ impl Renderer {
         if ok(COLOR_FORMAT) && ok(DEPTH_FORMAT) { 4 } else { 1 }
     }
 
+    /// The adapter can draw triangle edges (`POLYGON_MODE_LINE`).
     pub fn supports_wireframe(&self) -> bool {
         self.pipelines.wire.is_some()
     }
@@ -202,15 +227,18 @@ impl Renderer {
         }
     }
 
+    /// The current colours.
     pub fn palette(&self) -> Palette {
         self.palette
     }
 
+    /// Draw triangle edges instead of lit surfaces (ignored without wireframe support).
     pub fn set_wireframe(&mut self, on: bool) {
         self.wireframe = on && self.supports_wireframe();
         self.dirty = true;
     }
 
+    /// Add a mesh with its object-to-world `model` matrix and style. One GPU mesh can back several objects.
     pub fn add_object(
         &mut self,
         device: &wgpu::Device,
@@ -237,10 +265,12 @@ impl Renderer {
         id
     }
 
+    /// The object with this id, if it still exists.
     fn object(&mut self, id: ObjectId) -> Option<&mut Object> {
         self.objects.iter_mut().find(|(i, _)| *i == id).map(|(_, o)| o)
     }
 
+    /// Show or hide an object.
     pub fn set_visible(&mut self, id: ObjectId, visible: bool) {
         if let Some(object) = self.object(id) {
             object.visible = visible;
@@ -248,6 +278,7 @@ impl Renderer {
         self.dirty = true;
     }
 
+    /// Change an object's colour or material.
     pub fn set_style(&mut self, queue: &wgpu::Queue, id: ObjectId, style: Style) {
         if let Some(object) = self.object(id) {
             if object.style != style {
@@ -258,6 +289,7 @@ impl Renderer {
         self.dirty = true;
     }
 
+    /// Remove all objects and plates.
     pub fn clear(&mut self) {
         self.objects.clear();
         self.plates.clear();
@@ -296,6 +328,7 @@ impl Renderer {
         boxes.chain(plates).reduce(|(a0, a1), (b0, b1)| (a0.min(b0), a1.max(b1)))
     }
 
+    /// Something changed since the last render, or the view is now `size` pixels.
     pub fn needs_render(&self, size: [u32; 2]) -> bool {
         self.dirty || self.target.as_ref().is_none_or(|t| t.size != size)
     }
@@ -427,14 +460,8 @@ impl Renderer {
         for plate in self.plates.iter().filter(|_| self.show_plates) {
             let (lo, hi) = plate_box(plate);
             let outline = self.palette.plate_outline;
-            let corner = |i: usize| {
-                [
-                    if i & 1 == 0 { lo.x } else { hi.x },
-                    if i & 2 == 0 { lo.y } else { hi.y },
-                    if i & 4 == 0 { lo.z } else { hi.z },
-                ]
-                .map(|v| v as f32)
-            };
+            let corners = box_corners(lo, hi);
+            let corner = |i: usize| corners[i].as_vec3().to_array();
             for (a, b) in
                 [(0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7)]
             {
@@ -470,6 +497,7 @@ impl Renderer {
     }
 }
 
+/// The uniform contents for an object.
 fn object_uniform(model: DMat4, style: Style) -> ObjectUniform {
     let m = style.material;
     ObjectUniform {
@@ -479,20 +507,14 @@ fn object_uniform(model: DMat4, style: Style) -> ObjectUniform {
     }
 }
 
+/// World-space bounds of an object: its object-space box transformed (a box around the turned box).
 fn world_bounds(object: &Object) -> Option<(DVec3, DVec3)> {
     let (lo, hi) = object.mesh.bounds?;
-    (0..8)
-        .map(|i| {
-            let corner = DVec3::new(
-                if i & 1 == 0 { lo.x } else { hi.x } as f64,
-                if i & 2 == 0 { lo.y } else { hi.y } as f64,
-                if i & 4 == 0 { lo.z } else { hi.z } as f64,
-            );
-            object.model.transform_point3(corner)
-        })
-        .fold(None, |acc: Option<(DVec3, DVec3)>, p| Some(acc.map_or((p, p), |(a, b)| (a.min(p), b.max(p)))))
+    let corners = box_corners(lo.as_dvec3(), hi.as_dvec3()).map(|c| object.model.transform_point3(c));
+    Some(corners.iter().fold((corners[0], corners[0]), |(a, b), &p| (a.min(p), b.max(p))))
 }
 
+/// The build volume of a plate as a box.
 fn plate_box(plate: &Plate) -> (DVec3, DVec3) {
     let [sx, sy, sz] = plate.size;
     let [px, py, pz] = plate.position;
@@ -500,6 +522,7 @@ fn plate_box(plate: &Plate) -> (DVec3, DVec3) {
 }
 
 impl Target {
+    /// Images of `size` pixels; the colour one can be sampled by the UI and copied for screenshots.
     fn new(device: &wgpu::Device, size: [u32; 2], sample_count: u32) -> Self {
         let texture = |label, format, samples, usage| {
             device.create_texture(&wgpu::TextureDescriptor {
@@ -533,6 +556,7 @@ impl Target {
 }
 
 impl Pipelines {
+    /// Compile the shaders and build every pipeline for `sample_count` MSAA.
     fn new(
         device: &wgpu::Device,
         globals_layout: &wgpu::BindGroupLayout,

@@ -10,6 +10,8 @@ pub fn decipher(raw: &[u8]) -> Vec<u8> {
     raw.iter().zip(FILE_APP_ID.iter().cycle()).map(|(&b, &k)| b.wrapping_sub(k % 255)).collect()
 }
 
+/// Decode `scene.bin` (or an islands member) into a MessagePack value, deciphering it first when `ciphered`
+/// (MNGO files; ZIP files are plain).
 pub fn decode(raw: &[u8], ciphered: bool) -> Result<rmpv::Value> {
     let deciphered;
     let mut data = if ciphered {

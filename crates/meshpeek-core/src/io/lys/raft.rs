@@ -22,22 +22,32 @@ use crate::mesh::Mesh;
 /// Shape of a raft, from `foundation.type`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
+    /// A disc round the footprint.
     Cylinder,
+    /// A square round the footprint.
     Cube,
+    /// A box over the footprint's bounding box.
     Rectangle,
+    /// A lattice of bars over the footprint's bounding box.
     Grid,
     /// Cylinders under the supports joined by thin bars along a Delaunay triangulation ("line triangle").
     Triangle,
+    /// The footprint's outline extruded.
     Vectoriel,
+    /// A dish: a floor over the footprint's outline with a rim wall.
     VectorielWall,
+    /// A small diamond per footprint cell.
     Pixelate,
+    /// A small cylinder per footprint cell.
     PixelateRound,
 }
 
 /// An object's raft settings.
 #[derive(Clone, Debug)]
 pub struct Foundation {
+    /// The object has a raft.
     pub enabled: bool,
+    /// Its shape.
     pub kind: Kind,
     /// Thickness in mm.
     pub size: f64,
@@ -45,10 +55,13 @@ pub struct Foundation {
     pub scale: f64,
     /// Draft: the top is wider than the bottom by `size * angle / 100`.
     pub angle: f64,
+    /// `vectorielWall`: width of the rim wall's top in mm.
     pub wall: f64,
+    /// `vectorielWall`: height of the rim wall above the floor in mm.
     pub extra_wall: f64,
     /// `rectangle` and `grid`: percent of the object's footprint.
     pub width: f64,
+    /// `rectangle` and `grid`: percent of the object's footprint in y.
     pub height: f64,
     /// Grid size in mm of the raster types.
     pub precision: f64,
@@ -116,6 +129,7 @@ pub struct RaftFoot {
     pub position: DVec3,
     /// Diameter of the cylinder under the support: its join cone plus half its join diameter, rounded up.
     pub node_diameter: f64,
+    /// The support's `base.joinDiameter`, the width of the bars that start at this foot.
     pub join_diameter: f64,
     /// Radius Lychee paints around the foot into the footprint of the silhouette rafts (`baseSupport`).
     pub reach: f64,
@@ -124,12 +138,15 @@ pub struct RaftFoot {
 /// The object's silhouette on the plate, in the object's frame without its yaw.
 #[derive(Clone, Debug, Default)]
 pub struct Footprint {
+    /// Lower corner of the bounding box.
     pub min: DVec2,
+    /// Upper corner of the bounding box.
     pub max: DVec2,
     /// Convex hull, counter-clockwise.
     pub hull: Vec<DVec2>,
     /// Filled cells (origin `min`, `cell` mm wide) when requested.
     pub cells: Vec<(usize, usize)>,
+    /// Width of a cell in mm (0 when not rastered).
     pub cell: f64,
 }
 
@@ -159,10 +176,12 @@ impl Footprint {
         Some(footprint)
     }
 
+    /// Width and depth of the bounding box.
     fn size(&self) -> DVec2 {
         self.max - self.min
     }
 
+    /// Centre of the bounding box.
     fn centre(&self) -> DVec2 {
         (self.min + self.max) / 2.0
     }
@@ -249,7 +268,9 @@ pub fn convex_hull(points: &[DVec2]) -> Vec<DVec2> {
 /// Where the raft is built: the object's position on the plate and its yaw (radians).
 #[derive(Clone, Copy, Debug)]
 pub struct Placement {
+    /// The object's position on the plate.
     pub position: DVec2,
+    /// The object's Z rotation in radians.
     pub yaw: f64,
 }
 
@@ -275,6 +296,7 @@ pub fn build(foundation: &Foundation, feet: &[RaftFoot], footprint: Option<&Foot
     mesh
 }
 
+/// Every raft type except `triangle`, built from the footprint in the object's yaw-less frame.
 fn footprint_raft(f: &Foundation, fp: &Footprint) -> Mesh {
     let (size, scale) = (f.size, f.scale / 100.0);
     let draft = f.size * f.angle / 100.0;

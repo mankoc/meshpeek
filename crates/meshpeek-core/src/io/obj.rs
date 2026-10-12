@@ -11,6 +11,7 @@ use crate::error::{LoadError, Result};
 use crate::io::{fan, line_chunks, map_file};
 use crate::mesh::Mesh;
 
+/// Load an OBJ file.
 pub fn load(path: &Path) -> Result<Mesh> {
     load_bytes(&map_file(path)?, path)
 }
@@ -32,6 +33,8 @@ struct Chunk {
     faces: Vec<(u32, u32)>,
 }
 
+/// Parse OBJ text: `v` lines (with optional `r g b` in 0..1) and `f` lines (polygons are fan-triangulated).
+/// Vertex colours are kept only when every vertex has them.
 pub fn parse(data: &[u8]) -> std::result::Result<Mesh, String> {
     let chunks: Vec<Chunk> = line_chunks(data, rayon::current_num_threads() * 4)
         .into_par_iter()
@@ -68,6 +71,7 @@ pub fn parse(data: &[u8]) -> std::result::Result<Mesh, String> {
     Ok(mesh)
 }
 
+/// Collect the vertices and raw face corners of one slice of lines.
 fn parse_chunk(text: &[u8]) -> std::result::Result<Chunk, String> {
     let mut chunk = Chunk { all_colored: true, ..Chunk::default() };
     for line in text.split(|&b| b == b'\n') {
@@ -108,6 +112,8 @@ fn parse_chunk(text: &[u8]) -> std::result::Result<Chunk, String> {
     Ok(chunk)
 }
 
+/// Turn a chunk's raw face corners into triangles of global vertex indices; `base` is the global index of the
+/// chunk's first vertex and `total` the number of vertices in the file.
 fn resolve(chunk: &Chunk, base: u32, total: u32) -> std::result::Result<Vec<[u32; 3]>, String> {
     let mut out = Vec::with_capacity(chunk.faces.len());
     let mut polygon = Vec::with_capacity(8);
@@ -126,6 +132,7 @@ fn resolve(chunk: &Chunk, base: u32, total: u32) -> std::result::Result<Vec<[u32
     Ok(out)
 }
 
+/// Whitespace-separated tokens of a line.
 fn fields(text: &[u8]) -> impl Iterator<Item = &[u8]> {
     text.split(|b| b.is_ascii_whitespace()).filter(|t| !t.is_empty())
 }
@@ -136,6 +143,7 @@ fn leading_int(token: &[u8]) -> Option<i64> {
     std::str::from_utf8(&token[..end]).ok()?.parse().ok()
 }
 
+/// A line as text for error messages.
 fn lossy(line: &[u8]) -> String {
     String::from_utf8_lossy(line).trim_end().to_string()
 }

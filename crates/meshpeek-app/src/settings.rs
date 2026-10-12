@@ -17,6 +17,7 @@ pub const MATERIALS: [(&str, Material); 4] = [
 /// Facets around `.lys` support columns and their joint spheres.
 pub const SUPPORT_DETAIL: [(&str, u32); 4] = [("Low", 6), ("Medium", 12), ("High", 24), ("Very high", 48)];
 
+/// Entries kept in File > Open Recent.
 pub const MAX_RECENT: usize = 10;
 
 /// Mouse orbit styles: turn around the world's vertical axis, or around the current view's axes.
@@ -45,23 +46,33 @@ impl Default for SpaceMouseSettings {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+/// Preferences, saved as TOML in the user's configuration folder.
 pub struct Settings {
+    /// Name of a [`MATERIALS`] entry for models.
     pub model_material: String,
     /// Used when the file has no colours of its own.
     pub model_color: [u8; 3],
+    /// Name of a [`MATERIALS`] entry for supports.
     pub support_material: String,
+    /// Colour of supports and rafts.
     pub support_color: [u8; 3],
+    /// Facets round support columns (a name in [`SUPPORT_DETAIL`]).
     pub support_detail: String,
     /// Blender, Maya and ZBrush export OBJ with Y up.
     pub obj_y_up: bool,
+    /// UI theme: one of [`THEMES`].
     pub theme: String,
     /// Draw the build plate of `.lys` files.
     pub show_plate: bool,
     /// Toolbar buttons show a text label under their icon.
     pub toolbar_text: bool,
+    /// Load the previous and next file of the folder in the background, for the arrow keys.
+    pub preload_neighbours: bool,
     /// One of [`ORBIT_STYLES`].
     pub mouse_orbit: String,
+    /// Space mouse options.
     pub space_mouse: SpaceMouseSettings,
+    /// Recently opened files, newest first.
     pub recent_files: Vec<PathBuf>,
 }
 
@@ -77,6 +88,7 @@ impl Default for Settings {
             theme: "System".into(),
             show_plate: true,
             toolbar_text: true,
+            preload_neighbours: true,
             mouse_orbit: "Turntable".into(),
             space_mouse: SpaceMouseSettings::default(),
             recent_files: Vec::new(),
@@ -100,6 +112,7 @@ impl Settings {
         Self::from_toml(&text)
     }
 
+    /// Parse saved settings; unknown or invalid values fall back to the defaults.
     pub fn from_toml(text: &str) -> Self {
         let mut settings: Self = toml::from_str(text).unwrap_or_default();
         let defaults = Self::default();
@@ -123,6 +136,7 @@ impl Settings {
         settings
     }
 
+    /// Write the settings file (errors are logged, not reported).
     pub fn save(&self) {
         let Some(file) = Self::file() else { return };
         if let Some(dir) = file.parent() {
@@ -149,14 +163,17 @@ impl Settings {
     }
 }
 
+/// The material called `name` in [`MATERIALS`].
 pub fn material(name: &str) -> Option<Material> {
     MATERIALS.iter().find(|(n, _)| *n == name).map(|(_, m)| *m)
 }
 
+/// An 8-bit colour as 0..1 floats.
 pub fn rgb(color: [u8; 3]) -> [f32; 3] {
     color.map(|c| c as f32 / 255.0)
 }
 
+/// Paths are equal (ignoring case on Windows).
 fn same_path(a: &Path, b: &Path) -> bool {
     if cfg!(windows) { a.to_string_lossy().eq_ignore_ascii_case(&b.to_string_lossy()) } else { a == b }
 }
