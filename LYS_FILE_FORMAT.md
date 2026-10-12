@@ -468,34 +468,102 @@ are not readable.
 
 ### 9.3 Supports (`supports.present.byId`)
 
-- `tip` and `tipNormal` are in the tip object's space (`objectIdTip`).
-- Supports **without** `isBaseTip` stand on the plate: `base.z` is plate height, `base.x/y` are relative to the
-  base object's `position.x/y` **and turned by the object's Z rotation** (the support grid follows the object's
-  yaw: with a 49.5° yaw, a foot stored at (24, −24) stands at (33.84, 2.65)).
-- Supports **with** `isBaseTip` branch off another support: `base` is in the base object's space
-  (`objectIdBase`) and lies exactly on the parent support's column.
-- A branch **without `parentBaseId`** starts on the model itself, not on another support: its `base` is the contact
-  point on the surface (in the base object's space) and `baseNormal` points away from it. It gets a **base cone**
-  from `settings.baseTip` (`pointDiameter` at the surface widening to `diameter` over `length`), mirroring the tip
-  cone.
-- **Mini supports** (`mini: true`, always branches) are short bridges: from a point on the model (no
-  `parentBaseId`) or from another support's column to a point on the model. Their `base` and `tip` are a few mm
-  apart and the two cones (`baseTip.length` + `tip.length`) are longer than that gap (in the Irilya sample 102 of
-  104 parentless minis; none of the normal supports). Lychee draws a mini as a **thin uniform rod** from start to
-  tip, including a mini that starts on another mini: its thickness is `settings.extra.baseTipPointDiameter2` at
-  the start and `extra.tipPointDiameter2` at the tip (0.5 and 0.6 mm in a "medium" preset, 0.3 in "light", 1 in
-  "heavy"), not the full column `diameter`. The measured rod width in a Lychee screenshot (about 0.55 mm) matches.
-- Supports with **`parentTipId`** are braces: their tip lies exactly on another support's column (no tip cone).
-- Shape: foot (`base.diameter`, `base.length`; a small foot for `isSupportGrid` objects) → vertical column up
-  to the knee at `base.length + base.joinLength` along `baseNormal` → angled column to the end of the tip cone →
-  tip cone (`tip.pointDiameter` → `tip.diameter`, `tip.length`) along `tipNormal`.
-- `baseNormal` of a plate support is **not stored consistently**: in the same file (`Nosferatu_Figure_75mm_SUP.lys`,
-  object rotated 85° about X) most records hold the world-space direction `(0, 0, 1)`, while a few hold the
-  object-space equivalent `(0, 0.996, 0.087)`. Reading both as world space turns the latter into long horizontal
-  columns. Reading each one both ways (as stored, and rotated by the base object's matrix) and keeping the
-  one with the larger world `z` makes every branch start (`isBaseTip`) land exactly on its parent column.
-- The bracing lattice drawn by Lychee between grid supports is generated at runtime from the bracing presets
-  (`settings.supports.bracingPreset`) and is **not** stored in the file.
+Source: Lychee's own `SupportTip.ts`, `SupportBase.ts`, `SupportMiddle.ts` and `CapsuleBufferGeometry.ts` (the bundle
+`render3D.js`), ported in `meshpeek-core/src/io/lys/supports.rs`.
+
+**Records.** `tip` and `tipNormal` are in the tip object's space (`objectIdTip`). A support **without** `isBaseTip`
+stands on the plate: `base.z` is plate height, `base.x/y` are relative to the base object's `position.x/y` **and
+turned by the object's Z rotation** (the support grid follows the yaw). A support **with** `isBaseTip` is a *branch*:
+`base` is in the base object's space (`objectIdBase`), on a parent support (`parentBaseId` set) or on the model
+itself (not set). `parentTipId`: the tip rests on another support. `isBracing` = both parents set and different.
+`mini: true` marks mini supports. The plate support's `baseNormal` is ignored: its column is always vertical.
+
+**Primitive: the capsule.** Every part is a *capsule*: the hull of two spheres whose centres are the chain's points
+(radii `r_a`, `r_b`), so each round end reaches one radius past its point; an end can be cut flat at its centre.
+
+**Positions** (`L` = straight distance from base to tip; `short = min(0.33 * L, 2)`, Lychee's
+`PERCENT_LENGTH_BRACING` and `MAX_LENGTH_BRACING`):
+
+- tip normal: the stored one, leaned towards `-Z` by `(100 - tip.angle)` percent (not for bracing); for a mini
+  branch, the direction back to the base join.
+- tip join = tip point + normal * `tip.length` (`short` for bracing and mini), pushed up if it would dip below the
+  plate (`z < tip.diameter`: set to `tip.diameter / 2 + 0.1`).
+- plate support: base join = foot + `(0, 0, lengthJoin)` with `lengthJoin = max(min(tip join z, base.joinLength),
+  base.joinDiameter / 2)`.
+- branch: orientation = `baseNormal`, leaned towards the tip by `(100 - baseTip.angle)` percent when it starts on the
+  model (a mini points straight at the tip); base join = start + orientation * `baseTip.length` (`short` for bracing
+  and mini).
+
+**Parts and radii:**
+
+- *Tip* (capsule, tip point to tip join): radius at the point `tip.pointDiameter / 2`, at the join `tip.diameter / 2`,
+  both capped at `length * 1.75 / 2`, with `length = |tip point - tip join| + tip.penetration`; flat at the point when
+  `parentTipId` is set, whose radii are then capped at the parent's diameter there. A **mini** has radius
+  `tip.pointDiameter / 2` at both ends, reduced by 33% towards `baseTip.pointDiameter / 2`: a thin rod.
+- *Base of a branch* (capsule, start to base join): same rules with `baseTip.*`; flat at the start when it is on a
+  parent support, flat at the join end for a bracing.
+- *Base of a plate support*: a column of radius `base.joinDiameter / 2` from the plate to the base join, flat at the
+  plate, with a ball at the join; a **foot pad** (`base.length` thick, `base.diameter` wide, its top wider by
+  `length * tan(base.angle)`; `base.type` can make it a square, diamond or octagon); and the **join cone**
+  (`base.joinCone` tall, `joinDiameter / 2` wider than the column at the plate) on the pad. With a raft (section 9.3a)
+  the pad is not drawn.
+- *Middle* (capsule, base join to tip join): radius `base radius` at the base join (`joinDiameter / 2` for a plate
+  support) and the tip's radius at the tip join; flat at the tip join when `tip.type` is not `cylinder`, flat at the
+  base join for a branch unless `baseTip.type` is `cylinder`.
+- A *brace* (`isBracing`) is drawn as **one straight capsule** from its base point to its tip point, as long as their
+  distance: Lychee ignores the stored normals for it (they are the parents' surface normals) and uses the direction
+  between the two points. It is `baseTip.pointDiameter` wide at the start and narrows to the diameter of the support
+  it ends on (see below); both ends are flat.
+- A brace matches the parent's diameter at its height, from Lychee's `smallestDiameterToBraceOn`: the base diameter
+  below the parent's base join, the tip diameter above its tip point, interpolated in between.
+
+**Shape types.** `tip.type` / `baseTip.type`: `cone` (default), `cube` (4-sided, turned 45 degrees), `cylinder`
+(constant point radius) or `cross` (extruded 12-corner cross, with a ball at the join). `mid.type` (middle and plate
+column): `cylinder`, `cube` (4-sided prism) or `cross`. `base.type` (pad): `cylinder`, `cone`, `cube`, `cube45`,
+`octagon` or `cross`. `breakPoint` adds a ball at the tip / base point of a non-mini support that rests on the model.
+
+Not ported: adaptive bases, FDM printers and the mini plate supports' sideways join offset.
+
+### 9.3a Raft (`objects.present.byId.<id>.foundation`)
+
+Source: Lychee's own `foundation/*.ts` (the bundle `render3D.js`), ported in `meshpeek-core/src/io/lys/raft.rs`.
+
+- The raft is switched on **per object**: `foundation.enabled` (and `visible`). The scene setting
+  `settings.batch.msla.raft` is not what drives it (35 of 55 sampled scenes have `foundation.enabled: true` with it
+  off); MeshPeek uses that setting only for objects without a `foundation`.
+- A raft is **not built from the supports' feet** (except `triangle`): it follows the object's footprint on the plate
+  (its silhouette seen from below, or its bounding box), which Lychee computes when it runs. All of them are built in
+  the object's frame without its yaw (Z rotation) and then turned by the yaw about the object's `position`.
+- With `foundation.baseSupport`, Lychee paints a disc around the foot of every plate support into the silhouette
+  before tracing it (radius `ceil(joinCone + joinDiameter / 2)`, rounded up to the raster step), so the silhouette
+  rafts also cover feet that lie outside the model's outline.
+- `foundation.type` and its parameters, with Lychee's defaults for the type in brackets:
+
+| type | shape | parameters |
+|---|---|---|
+| `cylinder` | disc, radius `0.51 * diagonal of the footprint's bounding box * scale/100` | size (0.5), scale (100), angle (100) |
+| `cube` | square (a 4-sided cylinder turned 45 degrees), half-diagonal `0.75 * the larger side * scale/100` | size (0.5), scale, angle (100) |
+| `rectangle` | box `width`% x `height`% of the footprint's bounding box, times `scale`% | size (0.5), scale, angle (100), width, height (100) |
+| `grid` | lattice of bars with a peaked profile, `wall` wide and `size` tall, every `2 * wall`, over the bounding box | size (1.5), wall (1), width, height, scale |
+| `triangle` | a cylinder (12 sides) under every plate support and a thin bar along every Delaunay edge between them | size (0.5), scale (100) |
+| `vectoriel` | the exact silhouette (holes included) extruded `size` thick | precision (1, divided by 5, at least 0.1 mm), size (0.5), scale (200), angle (100) |
+| `vectorielWall` | the silhouette's concave hull (concavity 10 is practically the convex hull): a floor `size` thick and a rim wall `wall` wide | size (1), wall (1), extraWall (1), angle (200), concavity (10), precision |
+| `pixelate`, `pixelateRound` | a small diamond (4 sides) or cylinder (12 sides) per silhouette cell of `precision` mm | precision (1), size (0.5), scale (200), angle (100) |
+
+- **`angle` is a slope in percent: the top of the raft is wider than the bottom by `size * angle / 100`** (so 100 =
+  45 degrees, and a 1 mm raft with `angle: 200` is 2 mm wider all round at the top). It applies to `cylinder`,
+  `cube`, `rectangle`, `vectoriel`, `pixelate` and `vectorielWall`.
+- `vectorielWall` is a dish: the floor's top is at `size`, the outer face leans out from the outline at the plate
+  (z = 0) to `size * angle / 100` beyond it at `size + extraWall`, the rim wall's top is `wall` wide, and its inner
+  face comes down to the floor.
+- `triangle`: the cylinder's diameter is `ceil((joinCone + joinDiameter / 2) * 2) * scale / 100` (or
+  `joinDiameter / 2` when `joinCone` is 0), `size + 0.01` tall; the bar between two supports is `joinDiameter` wide
+  (the smaller of the two), `size` tall and the distance between them minus 0.4 long, shifted 0.2 towards the first.
+  Collinear feet have no triangulation and so no bars.
+- **The supports on a raft:** the foot pad (`base.diameter`, `base.type`) is **not drawn**; the column starts with its
+  join cone (`base.joinCone` tall and `joinDiameter / 2` wider than the column at the plate). The cones are raised by
+  `foundation.size` (minus 0.001) for `triangle`, `vectoriel`, `vectorielWall` and `pixelate*`, and stay at the plate
+  for `cylinder`, `cube`, `rectangle` and `grid`.
 
 ### 9.4 Build plate
 

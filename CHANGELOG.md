@@ -2,6 +2,29 @@
 
 All notable changes to MeshPeek, newest first.
 
+## 0.3.0 — 2026-10-12
+
+### Changed
+- **Rafts** are now a port of Lychee's own code. `.lys` objects whose `foundation` is enabled show their raft; all
+  eight types are supported (`cylinder`, `cube`, `rectangle`, `grid`, `triangle`, `vectoriel`, `vectorielWall`,
+  `pixelate` / `pixelateRound`). A raft follows the object's footprint on the plate (the `triangle` type: thin bars
+  between cylinders under the supports); the `angle` is a slope in percent (the top is `size * angle / 100` wider
+  than the bottom); `vectorielWall` is a dish with a rim wall that leans outwards. The silhouette types use the
+  convex hull or a raster of the object's projection, an approximation of Lychee's traced contour.
+- **Support geometry** is now a port of Lychee's own code: every part is a capsule (two spheres joined by a cone,
+  rounded ends), the join positions, radii and flat ends follow Lychee's rules, mini supports and braces use its
+  short cones (a third of their length, at most 2 mm) and thin radii, braces match the diameter of the support they
+  rest on, the foot pad has Lychee's shape and the join cone sits on it. Supports on a raft lose their foot pad and
+  start with their join cone on top of the raft.
+- **All support shape types**: `cube`, `cylinder` and `cross` tips and base tips, `cube` / `cross` middles and columns,
+  `cube`, `cube45`, `octagon`, `cone` and `cross` foot pads, and break points.
+- Silhouette rafts with `baseSupport` now cover the feet of the plate supports (Lychee paints a disc around each foot
+  into the outline), so a support standing outside the model's outline no longer pokes out of the raft.
+- **Braces** between two supports are straight again: Lychee draws each as one capsule from its base to the other
+  support, narrowing from the diameter of the support it starts on to that of the support it ends on, and it
+  recomputes the normals along that line. I had used the stored normals (those of the parent supports), which gave
+  bent braces.
+
 ## 0.2.3 — 2026-10-12
 
 ### Added

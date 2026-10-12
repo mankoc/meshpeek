@@ -7,6 +7,7 @@ use glam::{DMat3, DMat4, DVec3, DVec4};
 use rmpv::Value;
 
 use super::container::Archive;
+use super::raft::{self, Footprint, Foundation, Kind, Placement, RaftFoot};
 use super::value::{self, get, ids, index, path, str_of, vec3};
 use super::{codec, mesh_bin, supports};
 use crate::error::{LoadError, Result};
@@ -72,6 +73,43 @@ fn object_mesh(archive: &mut Archive, obj: &Value) -> std::result::Result<Mesh, 
     mesh_bin::parse(&raw).map_err(|e| e.to_string())
 }
 
+/// The raft of one object (`None` when its `foundation` is off or the raft is empty).
+fn object_raft(object: Option<&Value>, mesh: &Mesh, feet: Option<Vec<RaftFoot>>, scene_raft: bool) -> Option<Mesh> {
+    let foundation = Foundation::of(object, scene_raft);
+    if !foundation.enabled {
+        return None;
+    }
+    // The raft is built in the object's frame without its yaw, then turned by the yaw about its position.
+    let rotation = vec3(object.and_then(|o| get(o, "rotation")), 0.0) * (std::f64::consts::PI / 180.0);
+    let scale = vec3(object.and_then(|o| get(o, "scale")), 1.0);
+    let to_local = DMat4::from_mat3(
+        DMat3::from_rotation_y(rotation.y) * DMat3::from_rotation_x(rotation.x) * DMat3::from_diagonal(scale),
+    );
+    let position = vec3(object.and_then(|o| get(o, "position")), 0.0);
+    let at = Placement { position: glam::DVec2::new(position.x, position.y), yaw: rotation.z };
+    let cell = match foundation.kind {
+        Kind::Vectoriel => Some((foundation.precision / 5.0).max(0.1)),
+        Kind::Pixelate | Kind::PixelateRound => Some(foundation.precision),
+        _ => None,
+    };
+    let feet = feet.unwrap_or_default();
+    // with `baseSupport` Lychee paints a disc around every plate support's foot into the silhouette
+    let step = (foundation.precision / 5.0).max(0.1);
+    let discs: Vec<(glam::DVec2, f64)> = if foundation.base_support {
+        feet.iter()
+            .map(|f| {
+                let from_object = glam::DVec2::new(f.position.x, f.position.y) - at.position;
+                (glam::DMat2::from_angle(-at.yaw) * from_object, (f.reach / step).ceil() * step)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let footprint = if foundation.kind == Kind::Triangle { None } else { Footprint::of(mesh, &to_local, cell, &discs) };
+    let raft = raft::build(&foundation, &feet, footprint.as_ref(), at);
+    (raft.n_faces() > 0).then_some(raft)
+}
+
 pub fn load(file: &Path, support_sides: u32) -> Result<Scene> {
     load_data(file, Data::Mapped(map_file(file)?), support_sides)
 }
@@ -108,10 +146,14 @@ pub fn load_data(file: &Path, data: Data, support_sides: u32) -> Result<Scene> {
 
     let support_state = path(&state, "supports.present");
     let raft = path(&state, "settings.batch.msla.raft.enabled").and_then(Value::as_bool).unwrap_or(false);
-    let mut support_meshes = supports::build(support_state, &placed, &by_id, support_sides, raft);
+    let (mut support_meshes, mut feet) = supports::build(support_state, &placed, &by_id, support_sides, raft);
     for (oid, model) in models {
+        let mut support_mesh = support_meshes.remove(oid);
+        if let Some(raft_mesh) = object_raft(by_id.get(oid).copied(), &model.mesh, feet.remove(oid), raft) {
+            support_mesh = Some(Mesh::merge(support_mesh.into_iter().chain([raft_mesh])));
+        }
         scene.objects.push(model);
-        if let Some(mesh) = support_meshes.remove(oid) {
+        if let Some(mesh) = support_mesh {
             let mut support = SceneObject::new("Supports", mesh, file);
             support.kind = ObjectKind::Support;
             support.parent = Some(scene.objects.len() - 1);

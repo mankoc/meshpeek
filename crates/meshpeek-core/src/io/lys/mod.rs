@@ -4,6 +4,7 @@ pub mod codec;
 pub mod container;
 pub mod loader;
 pub mod mesh_bin;
+pub mod raft;
 pub mod supports;
 pub mod value;
 
