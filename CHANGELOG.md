@@ -2,6 +2,16 @@
 
 All notable changes to MeshPeek, newest first.
 
+## Unreleased
+
+### Changed
+- **Preferences** is arranged in sections listed on the left (Appearance with the model and support colours,
+  Navigation, Space mouse and, on Windows, System) instead of one long list; the window opens centred, OK / Cancel sit at the bottom
+  right, and the explanations moved into tooltips.
+
+### Fixed
+- The user guide of 0.3.1 showed wide gaps in the middle of its sentences.
+
 ## 0.3.1 — 2026-10-12
 
 ### Added

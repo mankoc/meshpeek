@@ -9,6 +9,7 @@
 mod app;
 mod help;
 mod loading;
+mod preferences;
 mod settings;
 mod sources;
 mod spacemouse;

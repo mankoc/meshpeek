@@ -11,7 +11,8 @@ use meshpeek_render::{ObjectId, Palette, Style};
 
 use crate::help;
 use crate::loading::{self, LoadResult};
-use crate::settings::{MATERIALS, ORBIT_STYLES, SUPPORT_DETAIL, Settings, THEMES, material, rgb};
+use crate::preferences;
+use crate::settings::{MATERIALS, Settings, material, rgb};
 use crate::sources::{self, Node};
 use crate::spacemouse::{self, Motion};
 use crate::viewport::{View, Viewport};
@@ -111,6 +112,8 @@ pub struct MeshPeekApp {
     settings: Settings,
     /// Settings being edited in the Preferences window (previewed live), if it is open.
     draft: Option<Settings>,
+    /// Page shown in the Preferences window.
+    preferences_section: preferences::Section,
     /// Rows of the objects tree; a model's supports follow it.
     entries: Vec<Entry>,
     /// Objects that could not be loaded, as `"<name>: <reason>"`.
@@ -196,6 +199,7 @@ impl MeshPeekApp {
             preloaded: HashMap::new(),
             preload_results: channel(),
             preloaded_for: None,
+            preferences_section: preferences::Section::default(),
             status: "Open or drop STL, OBJ, PLY or LYS files".into(),
             wireframe: false,
             show_objects: true,
@@ -902,84 +906,25 @@ impl MeshPeekApp {
         let Some(mut draft) = self.draft.take() else { return };
         let mut decision = None; // Some(true) = OK, Some(false) = Cancel
         let mut open = true;
-        egui::Window::new("Preferences").collapsible(false).resizable(false).open(&mut open).show(ctx, |ui| {
-            egui::Grid::new("preferences").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
-                let combo = |ui: &mut egui::Ui, id: &str, value: &mut String, options: &[&str]| {
-                    egui::ComboBox::from_id_salt(id).selected_text(value.as_str()).show_ui(ui, |ui| {
-                        for option in options {
-                            ui.selectable_value(value, option.to_string(), *option);
-                        }
-                    });
-                };
-                let materials: Vec<&str> = MATERIALS.iter().map(|(n, _)| *n).collect();
-                ui.label("Model material:");
-                combo(ui, "model material", &mut draft.model_material, &materials);
-                ui.end_row();
-                ui.label("Model colour:");
-                ui.color_edit_button_srgb(&mut draft.model_color).on_hover_text("Used when the file has no colours");
-                ui.end_row();
-                ui.label("Support material:");
-                combo(ui, "support material", &mut draft.support_material, &materials);
-                ui.end_row();
-                ui.label("Support colour:");
-                ui.color_edit_button_srgb(&mut draft.support_color);
-                ui.end_row();
-                ui.label("Support detail:");
-                let details: Vec<&str> = SUPPORT_DETAIL.iter().map(|(n, _)| *n).collect();
-                combo(ui, "support detail", &mut draft.support_detail, &details);
-                ui.end_row();
-                ui.label("OBJ files:");
-                ui.checkbox(&mut draft.obj_y_up, "Y is up (Blender, Maya, ZBrush)")
-                    .on_hover_text("Rotate OBJ files so their Y axis points up. Applied by reloading open files.");
-                ui.end_row();
-                ui.label("Button bar:");
-                ui.checkbox(&mut draft.toolbar_text, "Show text under the icons");
-                ui.end_row();
-                ui.label("Theme:");
-                combo(ui, "theme", &mut draft.theme, &THEMES);
-                ui.end_row();
-                ui.label("Mouse orbit:");
-                combo(ui, "mouse orbit", &mut draft.mouse_orbit, &ORBIT_STYLES);
-                ui.end_row();
-                ui.label("LYS files:");
-                ui.checkbox(&mut draft.show_plate, "Show build plate");
-                ui.end_row();
-                ui.label("Arrow keys:");
-                ui.checkbox(&mut draft.preload_neighbours, "Preload the previous and next file")
-                    .on_hover_text("Uses memory for two more models, but stepping through a folder is instant");
-                ui.end_row();
-                if cfg!(windows) {
-                    ui.label("File types:");
-                    let hint = "Windows decides which program opens STL, OBJ, PLY and LYS files: pick MeshPeek there";
-                    if ui.button("Make default app…").on_hover_text(hint).clicked() {
-                        open_default_apps_settings();
+        let section = &mut self.preferences_section;
+        egui::Window::new("Preferences")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .open(&mut open)
+            .show(ctx, |ui| {
+                preferences::show(ui, &mut draft, section);
+                ui.separator();
+                let row = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
+                ui.allocate_ui_with_layout(row, egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Cancel").clicked() {
+                        decision = Some(false);
                     }
-                    ui.end_row();
-                }
-                ui.label("Space mouse:");
-                ui.checkbox(&mut draft.space_mouse.enabled, "Enabled");
-                ui.end_row();
-                ui.label("    Sensitivity:");
-                ui.add(egui::Slider::new(&mut draft.space_mouse.sensitivity, 0.1..=5.0).logarithmic(true));
-                ui.end_row();
-                ui.label("    Invert:");
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut draft.space_mouse.invert_pan, "Pan");
-                    ui.checkbox(&mut draft.space_mouse.invert_zoom, "Zoom");
-                    ui.checkbox(&mut draft.space_mouse.invert_rotation, "Rotation");
+                    if ui.button("OK").clicked() {
+                        decision = Some(true);
+                    }
                 });
-                ui.end_row();
             });
-            ui.separator();
-            ui.horizontal(|ui| {
-                if ui.button("OK").clicked() {
-                    decision = Some(true);
-                }
-                if ui.button("Cancel").clicked() {
-                    decision = Some(false);
-                }
-            });
-        });
         if !open {
             decision = Some(false);
         }
@@ -1180,7 +1125,7 @@ impl MeshPeekApp {
     }
 
     /// Test hook: `MESHPEEK_SNAPSHOT_ACTIONS="theme=Light;center=Bust;view=Front;orbit=90,0;pan=100,0;dolly=4;controls;guide;about;preferences"` is
-    /// applied once loading finished, before the snapshot. `wait=<ms>` pauses (background preloads go on) and
+    /// applied once loading finished, before the snapshot. `preferences=<section>` opens Preferences on a section. `wait=<ms>` pauses (background preloads go on) and
     /// takes the preloads that finished; `next` / `previous` step through the folder like the arrow keys.
     fn snapshot_actions(&mut self, ctx: &egui::Context) {
         let Ok(actions) = std::env::var("MESHPEEK_SNAPSHOT_ACTIONS") else { return };
@@ -1206,6 +1151,12 @@ impl MeshPeekApp {
                 Some(("pan", pixels)) => {
                     let (dx, dy) = pixels.split_once(',').unwrap_or((pixels, "0"));
                     self.viewport.pan_pixels(dx.parse().unwrap_or(0.0), dy.parse().unwrap_or(0.0));
+                }
+                Some(("preferences", name)) => {
+                    self.draft = Some(self.settings.clone());
+                    if let Some(section) = preferences::Section::named(name) {
+                        self.preferences_section = section;
+                    }
                 }
                 Some(("wait", ms)) => {
                     std::thread::sleep(std::time::Duration::from_millis(ms.parse().unwrap_or(0)));
@@ -1340,7 +1291,7 @@ fn tool_button(
 }
 
 /// Windows does not let programs set file associations themselves; open its "Default apps" page instead.
-fn open_default_apps_settings() {
+pub(crate) fn open_default_apps_settings() {
     if let Err(e) = std::process::Command::new("explorer.exe").arg("ms-settings:defaultapps").spawn() {
         log::warn!("could not open the Default apps settings: {e}");
     }

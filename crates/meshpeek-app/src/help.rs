@@ -63,46 +63,65 @@ pub const GUIDE: &[(&str, &[&str])] = &[
     (
         "Opening files",
         &[
-            "MeshPeek opens STL (binary and ASCII), OBJ, PLY and Lychee Slicer .lys files. Use File > Open (Ctrl+O),              File > Open Recent, drag files onto the window, or pass them on the command line.",
-            "Several files can be open at once; they keep their own coordinates, so parts exported from one              assembly line up. File > Clear scene (Ctrl+W) removes everything.",
-            "File > Open folder lists a folder in the Files tab; tick files there to show them. ZIP, 7z and RAR              archives open like folders: their models are read straight from the archive, nothing is unpacked              to disk.",
-            "The left / right arrow keys open the previous / next model of the same folder or archive, alone in              the scene. MeshPeek loads those two neighbours in the background while you look at a file, so              stepping through a folder is instant (Preferences > Arrow keys turns this off to save memory).",
+            "MeshPeek opens STL (binary and ASCII), OBJ, PLY and Lychee Slicer .lys files. Use File > Open (Ctrl+O), \
+             File > Open Recent, drag files onto the window, or pass them on the command line.",
+            "Several files can be open at once; they keep their own coordinates, so parts exported from one \
+             assembly line up. File > Clear scene (Ctrl+W) removes everything.",
+            "File > Open folder lists a folder in the Files tab; tick files there to show them. ZIP, 7z and RAR \
+             archives open like folders: their models are read straight from the archive, nothing is unpacked \
+             to disk.",
+            "The left / right arrow keys open the previous / next model of the same folder or archive, alone in \
+             the scene. MeshPeek loads those two neighbours in the background while you look at a file, so \
+             stepping through a folder is instant (Preferences > Navigation turns this off to save memory).",
         ],
     ),
     (
         "Moving around",
         &[
-            "Orbit with the left mouse button, pan with the middle button (or Shift + left), zoom with the wheel              or the right button. The keyboard and a 3Dconnexion space mouse work too: see Help > Controls (F1).",
-            "F fits everything into view. The number keys 0–6 and the gizmo in the top-right corner switch to              the standard views. W toggles wireframe, H hides or shows all objects.",
+            "Orbit with the left mouse button, pan with the middle button (or Shift + left), zoom with the wheel \
+             or the right button. The keyboard and a 3Dconnexion space mouse work too: see Help > Controls (F1).",
+            "F fits everything into view. The number keys 0–6 and the gizmo in the top-right corner switch to \
+             the standard views. W toggles wireframe, H hides or shows all objects.",
         ],
     ),
     (
         "Objects panel",
         &[
-            "Every model is listed with a checkbox; for Lychee files its supports appear indented under it.              Hiding a model hides its supports as well; supports can also be hidden on their own.",
-            "Click the crosshair icon next to a model to centre the view on it: rotation then pivots around that              model and the standard views keep it framed. Only one model can be centred at a time; click the              highlighted icon (or press F) to go back to the whole scene. The (i) icon shows facts about the              model and its file.",
+            "Every model is listed with a checkbox; for Lychee files its supports appear indented under it. \
+             Hiding a model hides its supports as well; supports can also be hidden on their own.",
+            "Click the crosshair icon next to a model to centre the view on it: rotation then pivots around that \
+             model and the standard views keep it framed. Only one model can be centred at a time; click the \
+             highlighted icon (or press F) to go back to the whole scene. The (i) icon shows facts about the \
+             model and its file.",
             "Models that could not be loaded are listed in orange with the reason.",
         ],
     ),
     (
         "Lychee .lys files",
         &[
-            "Models are placed as in Lychee, with the build plate. Supports, braces, mini supports and rafts are              rebuilt from the data in the file with the same geometry rules as Lychee, including every tip,              middle and foot shape (cone, cube, cylinder, cross, octagon…) and all raft types.",
+            "Models are placed as in Lychee, with the build plate. Supports, braces, mini supports and rafts are \
+             rebuilt from the data in the file with the same geometry rules as Lychee, including every tip, \
+             middle and foot shape (cone, cube, cylinder, cross, octagon…) and all raft types.",
             "Models from the Lychee Library (.lyd) are encrypted and cannot be shown; they are listed as skipped.",
         ],
     ),
     (
         "Preferences",
         &[
-            "File > Preferences (Ctrl+,) sets the material and colour of models and supports (previewed live),              the support detail, whether OBJ files are Y-up (Blender, Maya and ZBrush export them that way),              the theme (light, dark or the system's), the mouse orbit style, the build plate, preloading for the              arrow keys and the space mouse. Changing support detail or the OBJ axis reloads the open files.",
+            "File > Preferences (Ctrl+,) is arranged in sections (Appearance, Navigation, Space mouse, \
+             System) listed on the left. It sets the material and colour of models and supports (previewed live), \
+             the support detail, whether OBJ files are Y-up (Blender, Maya and ZBrush export them that way), \
+             the theme (light, dark or the system's), the mouse orbit style, the build plate, preloading for the \
+             arrow keys and the space mouse. Changing support detail or the OBJ axis reloads the open files.",
             "View > Colour each model gives every model its own colour.",
         ],
     ),
     (
         "Graphics card and performance",
-        &[
-            "MeshPeek draws with the graphics card. Without a usable one it falls back to software rendering              (start with --cpu to force it); Help > About shows which is in use. Very large models stay fast on              a graphics card; in software mode they work but move slowly. Lowering the support detail helps              with large supported scenes.",
-        ],
+        &["MeshPeek draws with the graphics card. Without a usable one it falls back to software rendering \
+             (start with --cpu to force it); Help > About shows which is in use. Very large models stay fast on \
+             a graphics card; in software mode they work but move slowly. Lowering the support detail helps \
+             with large supported scenes."],
     ),
 ];
 
