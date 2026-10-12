@@ -141,6 +141,8 @@ pub struct Renderer {
     next_id: u64,
     plates: Vec<Plate>,
     show_plates: bool,
+    /// Draw the build volume (the box above the plate), not only the plate.
+    show_volume: bool,
     lines: Option<(wgpu::Buffer, u32)>,
     floor: Option<(wgpu::Buffer, u32)>,
     overlays_dirty: bool,
@@ -193,6 +195,7 @@ impl Renderer {
             next_id: 0,
             plates: Vec::new(),
             show_plates: true,
+            show_volume: true,
             lines: None,
             floor: None,
             overlays_dirty: true,
@@ -278,6 +281,16 @@ impl Renderer {
         self.dirty = true;
     }
 
+    /// Move an object by `offset` (world units).
+    pub fn translate(&mut self, queue: &wgpu::Queue, id: ObjectId, offset: DVec3) {
+        if let Some(object) = self.object(id) {
+            object.model = DMat4::from_translation(offset) * object.model;
+            queue.write_buffer(&object.uniform, 0, bytemuck::bytes_of(&object_uniform(object.model, object.style)));
+        }
+        self.overlays_dirty = true; // the origin axes are sized from the scene
+        self.dirty = true;
+    }
+
     /// Change an object's colour or material.
     pub fn set_style(&mut self, queue: &wgpu::Queue, id: ObjectId, style: Style) {
         if let Some(object) = self.object(id) {
@@ -315,6 +328,21 @@ impl Renderer {
         }
     }
 
+    /// Show or hide the printer's build volume (the outline box above the plate); the plate itself stays.
+    pub fn set_show_volume(&mut self, show: bool) {
+        if self.show_volume != show {
+            self.show_volume = show;
+            self.overlays_dirty = true;
+            self.dirty = true;
+        }
+    }
+
+    /// The part of a plate that is drawn: the whole build volume, or only its floor.
+    fn shown_box(&self, plate: &Plate) -> (DVec3, DVec3) {
+        let (lo, hi) = plate_box(plate);
+        if self.show_volume { (lo, hi) } else { (lo, DVec3::new(hi.x, hi.y, lo.z)) }
+    }
+
     /// World-space bounds of one object.
     pub fn object_bounds(&self, id: ObjectId) -> Option<(DVec3, DVec3)> {
         let (_, object) = self.objects.iter().find(|(i, _)| *i == id)?;
@@ -324,7 +352,7 @@ impl Renderer {
     /// World-space bounds of all visible objects and plates.
     pub fn scene_bounds(&self) -> Option<(DVec3, DVec3)> {
         let boxes = self.objects.iter().filter(|(_, o)| o.visible).filter_map(|(_, o)| world_bounds(o));
-        let plates = self.plates.iter().filter(|_| self.show_plates).map(plate_box);
+        let plates = self.plates.iter().filter(|_| self.show_plates).map(|p| self.shown_box(p));
         boxes.chain(plates).reduce(|(a0, a1), (b0, b1)| (a0.min(b0), a1.max(b1)))
     }
 
@@ -462,9 +490,11 @@ impl Renderer {
             let outline = self.palette.plate_outline;
             let corners = box_corners(lo, hi);
             let corner = |i: usize| corners[i].as_vec3().to_array();
-            for (a, b) in
-                [(0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7)]
-            {
+            // the floor's outline (corners 0-3), then the volume's top and vertical edges
+            let floor_edges = [(0, 1), (2, 3), (0, 2), (1, 3)];
+            let volume_edges = [(4, 5), (6, 7), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7)];
+            let edges = floor_edges.iter().chain(volume_edges.iter().filter(|_| self.show_volume));
+            for &(a, b) in edges {
                 lines.push(FlatVertex { position: corner(a), color: outline });
                 lines.push(FlatVertex { position: corner(b), color: outline });
             }

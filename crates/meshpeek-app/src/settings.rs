@@ -64,6 +64,8 @@ pub struct Settings {
     pub theme: String,
     /// Draw the build plate of `.lys` files.
     pub show_plate: bool,
+    /// Draw the printer's build volume (the box above the plate) of `.lys` files.
+    pub show_volume: bool,
     /// Toolbar buttons show a text label under their icon.
     pub toolbar_text: bool,
     /// Load the previous and next file of the folder in the background, for the arrow keys.
@@ -87,6 +89,7 @@ impl Default for Settings {
             obj_y_up: true,
             theme: "System".into(),
             show_plate: true,
+            show_volume: true,
             toolbar_text: true,
             preload_neighbours: true,
             mouse_orbit: "Turntable".into(),

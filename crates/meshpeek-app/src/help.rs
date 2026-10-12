@@ -27,6 +27,7 @@ pub const CONTROLS: &[(&str, &[(&str, &str)])] = &[
             ("5 / 6", "Top / bottom view"),
             ("W", "Wireframe on / off"),
             ("H", "Hide all objects / show them again"),
+            ("A", "Arrange: spread the models out on the plate so they do not overlap"),
         ],
     ),
     (
@@ -68,9 +69,13 @@ pub const GUIDE: &[(&str, &[&str])] = &[
              command line.",
             "Several files can be open at once; they keep their own coordinates, so parts exported from one \
              assembly line up. File > Clear scene (Ctrl+W) removes everything.",
-            "File > Open folder lists a folder in the Files tab; tick files there to show them. ZIP, 7z and RAR \
-             archives open like folders: their models are read straight from the archive, nothing is unpacked \
-             to disk.",
+            "The Files tab is a file browser. Expand folders and archives with their arrow; double-click a \
+             folder or an archive to go into it, and Up to go back out (above a drive it lists the drives). \
+             Double-click a model to add it to the scene, or select several (Ctrl+click, Shift+click) and press \
+             Add selected; Add all adds every model of the current folder. File > Open folder (or Browse…) \
+             chooses the folder to show.",
+            "ZIP, 7z and RAR archives are browsed like folders: their models are read straight from the \
+             archive, nothing is unpacked to disk.",
             "The left / right arrow keys open the previous / next model of the same folder or archive, alone in \
              the scene. MeshPeek loads those two neighbours in the background while you look at a file, so \
              stepping through a folder is instant (Preferences > Navigation turns this off to save memory).",
@@ -83,6 +88,8 @@ pub const GUIDE: &[(&str, &[&str])] = &[
              or the right button. The keyboard and a 3Dconnexion space mouse work too: see Help > Controls (F1).",
             "F fits everything into view. The number keys 0–6 and the gizmo in the top-right corner switch to \
              the standard views. W toggles wireframe, H hides or shows all objects.",
+            "Arrange (toolbar, View menu or A) spreads the models out on the plate so they do not overlap: each \
+             model moves with its supports, heights stay as they are. Reloading the files puts them back.",
         ],
     ),
     (
@@ -123,7 +130,7 @@ pub const GUIDE: &[(&str, &[&str])] = &[
             "File > Preferences (Ctrl+,) is arranged in sections (Appearance, Navigation, Space mouse, \
              System) listed on the left. It sets the material and colour of models and supports (previewed live), \
              the support detail, whether OBJ files are Y-up (Blender, Maya and ZBrush export them that way), \
-             the theme (light, dark or the system's), the mouse orbit style, the build plate, preloading for the \
+             the theme (light, dark or the system's), the mouse orbit style, the build plate and printer volume, preloading for the \
              arrow keys and the space mouse. Changing support detail or the OBJ axis reloads the open files.",
             "View > Colour each model gives every model its own colour.",
         ],

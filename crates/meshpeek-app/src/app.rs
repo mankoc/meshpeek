@@ -1,6 +1,6 @@
 //! The MeshPeek window: menus, toolbar, objects tree, 3D view, status bar and dialogs.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
@@ -9,11 +9,13 @@ use eframe::egui_wgpu::RenderState;
 use meshpeek_core::{ObjectKind, SUPPORTED_EXTENSIONS};
 use meshpeek_render::{ObjectId, Palette, Style};
 
+use crate::arrange;
+use crate::browser::{self, Browser};
 use crate::help;
 use crate::loading::{self, LoadResult};
 use crate::preferences;
 use crate::settings::{MATERIALS, Settings, material, rgb};
-use crate::sources::{self, Node};
+use crate::sources;
 use crate::spacemouse::{self, Motion};
 use crate::viewport::{View, Viewport};
 
@@ -67,9 +69,6 @@ enum Preload {
     Ready(LoadResult),
 }
 
-/// Depth limit when listing a folder in the Files tab.
-const TREE_DEPTH: usize = 6;
-
 /// Coloured toolbar icons (PNG files in assets/toolbar, made by make_toolbar_icons.py).
 struct ToolIcons {
     open: egui::TextureHandle,
@@ -78,6 +77,7 @@ struct ToolIcons {
     objects: egui::TextureHandle,
     eye: egui::TextureHandle,
     colours: egui::TextureHandle,
+    arrange: egui::TextureHandle,
     /// The application icon, shown large in the About window.
     app: egui::TextureHandle,
 }
@@ -98,6 +98,7 @@ impl ToolIcons {
             objects: texture("objects", include_bytes!("../assets/toolbar/objects.png")),
             eye: texture("eye", include_bytes!("../assets/toolbar/eye.png")),
             colours: texture("colours", include_bytes!("../assets/toolbar/colours.png")),
+            arrange: texture("arrange", include_bytes!("../assets/toolbar/arrange.png")),
             app: texture("app", include_bytes!("../assets/icon.png")),
         }
     }
@@ -140,14 +141,8 @@ pub struct MeshPeekApp {
     show_objects: bool,
     show_toolbar: bool,
     panel_tab: PanelTab,
-    /// Folder listed in the Files tab, with its tree and the files ticked in it.
-    browse_root: Option<PathBuf>,
-    /// Files and folders under `browse_root`.
-    tree: Option<Node>,
-    /// Model entries of the archive listed in the Files tab (sorted), if it lists one.
-    archive_models: Option<(PathBuf, Vec<String>)>,
-    /// Files ticked in the Files tab (shown in the scene).
-    selected: BTreeSet<PathBuf>,
+    /// The Files tab: location, listings and selection.
+    browser: Browser,
     /// Give every model its own colour instead of the preferences colour.
     color_models: bool,
     /// Entry whose information window is open.
@@ -205,10 +200,7 @@ impl MeshPeekApp {
             show_objects: true,
             show_toolbar: true,
             panel_tab: PanelTab::Objects,
-            browse_root: None,
-            tree: None,
-            archive_models: None,
-            selected: BTreeSet::new(),
+            browser: Browser::default(),
             color_models: false,
             info_for: None,
             show_about: false,
@@ -232,17 +224,17 @@ impl MeshPeekApp {
         for path in &mut paths {
             if path.is_file() && sources::is_archive(path) {
                 let archive = path.clone();
-                match self.set_browse_root(Some(archive.clone())).ok().and_then(|_| self.first_model(&archive)) {
+                match self.browse(Some(archive.clone())).ok().and_then(|_| self.first_model(&archive)) {
                     Some(first) => *path = first,
                     None => self.status = format!("Could not open {}: no model files inside", archive.display()),
                 }
             }
         }
         if let Some(first) = paths.first() {
-            let inside = self.browse_root.as_ref().is_some_and(|root| first.starts_with(root));
+            let inside = self.browser.root().is_some_and(|root| first.starts_with(root));
             if !inside {
                 let root = if first.is_dir() { Some(first.clone()) } else { first.parent().map(Path::to_path_buf) };
-                let _ = self.set_browse_root(root);
+                let _ = self.browse(root);
             }
         }
         for path in &paths {
@@ -435,17 +427,14 @@ impl MeshPeekApp {
 
     /// The model file `step` places before (negative) or after the last opened file in its folder or archive,
     /// wrapping round; `None` when it is alone there.
-    fn neighbour(&self, step: isize) -> Option<PathBuf> {
-        let current = self.loaded_paths.last()?;
+    fn neighbour(&mut self, step: isize) -> Option<PathBuf> {
+        let current = self.loaded_paths.last()?.clone();
         let key = |p: &Path| p.to_string_lossy().replace('\\', "/").to_lowercase(); // whole path: names can repeat in sub-folders
-        let mut files: Vec<PathBuf> = if let Some((archive, _)) = sources::archive_of(current) {
+        let mut files: Vec<PathBuf> = if let Some((archive, _)) = sources::archive_of(&current) {
             // a model inside an archive: its neighbours are the archive's other models
-            let entries = match &self.archive_models {
-                Some((listed, entries)) if *listed == archive => entries.clone(),
-                _ => sources::list_models(&archive).unwrap_or_default(),
-            };
+            let entries = self.browser.archive_entries(&archive).unwrap_or_default();
             entries.iter().map(|e| archive.join(e)).collect()
-        } else if current.is_file() && sources::is_model(current) {
+        } else if current.is_file() && sources::is_model(&current) {
             let folder = current.parent()?;
             let mut files: Vec<PathBuf> = std::fs::read_dir(folder)
                 .into_iter()
@@ -459,7 +448,7 @@ impl MeshPeekApp {
         } else {
             return None;
         };
-        let index = files.iter().position(|p| key(p) == key(current))?;
+        let index = files.iter().position(|p| key(p) == key(&current))?;
         if files.len() < 2 {
             return None;
         }
@@ -478,48 +467,31 @@ impl MeshPeekApp {
         self.open_files(ctx, picked.unwrap_or_default());
     }
 
-    /// Ask for a folder to list in the Files tab.
-    fn open_folder_dialog(&mut self, ctx: &egui::Context) {
+    /// Ask for a folder and show it in the Files tab.
+    fn open_folder_dialog(&mut self) {
         if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-            let _ = self.set_browse_root(Some(folder.clone()));
+            let _ = self.browse(Some(folder));
             self.panel_tab = PanelTab::Files;
             self.show_objects = true;
-            self.open_files(ctx, [folder]);
         }
     }
 
-    /// List a folder, or the models of an archive, in the Files tab.
-    fn set_browse_root(&mut self, root: Option<PathBuf>) -> Result<(), String> {
-        self.selected.clear();
-        self.archive_models = None;
-        let mut result = Ok(());
-        self.tree = match root.as_deref() {
-            Some(r) if r.is_file() && sources::is_archive(r) => match sources::list_models(r) {
-                Ok(entries) => {
-                    let tree = sources::archive_tree(r, &entries);
-                    self.archive_models = Some((r.to_path_buf(), entries));
-                    Some(tree)
-                }
-                Err(e) => {
-                    self.status = format!("Could not open {}: {e}", r.display());
-                    result = Err(e);
-                    None
-                }
-            },
-            Some(r) => Some(sources::scan(r, TREE_DEPTH)),
-            None => None,
-        };
-        self.browse_root = root;
-        self.panel_tab = if self.archive_models.is_some() { PanelTab::Files } else { self.panel_tab };
-        result
+    /// Show a folder, or the contents of an archive, in the Files tab (archives switch to that tab).
+    fn browse(&mut self, root: Option<PathBuf>) -> Result<(), String> {
+        if let Some(archive) = root.as_deref().filter(|r| r.is_file() && sources::is_archive(r)) {
+            if let Err(e) = self.browser.archive_entries(archive) {
+                self.status = format!("Could not open {}: {e}", archive.display());
+                return Err(e);
+            }
+            self.panel_tab = PanelTab::Files;
+        }
+        self.browser.set_root(root);
+        Ok(())
     }
 
-    /// Virtual path of the first model of the archive listed in the Files tab.
-    fn first_model(&self, archive: &Path) -> Option<PathBuf> {
-        match &self.archive_models {
-            Some((listed, entries)) if listed == archive => entries.first().map(|e| archive.join(e)),
-            _ => None,
-        }
+    /// Virtual path of the first model of `archive`.
+    fn first_model(&mut self, archive: &Path) -> Option<PathBuf> {
+        self.browser.archive_entries(archive).ok()?.first().map(|e| archive.join(e))
     }
 
     // --- appearance --------------------------------------------------------------------------------
@@ -586,6 +558,9 @@ impl MeshPeekApp {
         if pressed(Key::H) {
             self.toggle_all_visible();
         }
+        if pressed(Key::A) {
+            self.arrange();
+        }
         if pressed(Key::W) {
             self.set_wireframe(!self.wireframe);
         }
@@ -617,7 +592,7 @@ impl MeshPeekApp {
                     self.open_dialog(&ctx);
                 }
                 if ui.button("Open folder…").clicked() {
-                    self.open_folder_dialog(&ctx);
+                    self.open_folder_dialog();
                 }
                 ui.menu_button("Open Recent", |ui| self.recent_menu(ui, &ctx));
                 if ui.add(egui::Button::new("Clear scene").shortcut_text(ctx.format_shortcut(&CLEAR))).clicked() {
@@ -648,8 +623,20 @@ impl MeshPeekApp {
                 if toggle.changed() {
                     self.set_wireframe(wireframe);
                 }
+                let mut volume = self.settings.show_volume;
+                if ui
+                    .checkbox(&mut volume, "Printer volume")
+                    .on_hover_text("Show the build volume above the plate")
+                    .changed()
+                {
+                    self.settings.show_volume = volume;
+                    self.settings.save();
+                }
                 ui.checkbox(&mut self.show_objects, "Objects panel");
                 ui.checkbox(&mut self.show_toolbar, "Button bar");
+                if ui.add(egui::Button::new("Arrange objects").shortcut_text("A")).clicked() {
+                    self.arrange();
+                }
                 if ui.add(egui::Button::new("Hide / show all objects").shortcut_text("H")).clicked() {
                     self.toggle_all_visible();
                 }
@@ -700,6 +687,44 @@ impl MeshPeekApp {
     }
 
     /// Hide everything, or show everything again when nothing is visible.
+    /// Move the models (each with its supports) on the XY plane so their footprints do not overlap, then frame
+    /// them. Heights do not change; reloading the files puts them back.
+    fn arrange(&mut self) {
+        let renderer = &self.viewport.renderer;
+        // one group per model: the model and the objects that belong to it (its supports)
+        let groups: Vec<Vec<usize>> = (0..self.entries.len())
+            .filter(|&i| self.entries[i].parent.is_none())
+            .map(|i| {
+                std::iter::once(i)
+                    .chain((0..self.entries.len()).filter(|&j| self.entries[j].parent == Some(i)))
+                    .collect()
+            })
+            .collect();
+        let mut boxes = Vec::new();
+        let mut movable = Vec::new();
+        for group in groups {
+            let bounds = group.iter().filter_map(|&i| renderer.object_bounds(self.entries[i].id));
+            if let Some((lo, hi)) = bounds.reduce(|(a0, a1), (b0, b1)| (a0.min(b0), a1.max(b1))) {
+                boxes.push((lo.truncate(), hi.truncate()));
+                movable.push(group);
+            }
+        }
+        if boxes.len() < 2 {
+            return;
+        }
+        // a gap of 5 % of a typical footprint, at least 1 mm
+        let typical = boxes.iter().map(|(lo, hi)| (*hi - *lo).length()).sum::<f64>() / boxes.len() as f64;
+        let offsets = arrange::arrange(&boxes, (typical * 0.05).max(1.0));
+        let queue = &self.render_state.queue;
+        for (group, offset) in movable.iter().zip(offsets) {
+            for &i in group {
+                self.viewport.renderer.translate(queue, self.entries[i].id, offset.extend(0.0));
+            }
+        }
+        self.viewport.fit_all();
+        self.status = format!("Arranged {} models", movable.len());
+    }
+
     fn toggle_all_visible(&mut self) {
         let show = !self.entries.iter().any(|e| e.visible);
         for entry in &mut self.entries {
@@ -719,27 +744,28 @@ impl MeshPeekApp {
         let text = self.draft.as_ref().unwrap_or(&self.settings).toolbar_text; // Preferences previews live
         let ctx = ui.ctx().clone();
         let icons = &self.tool_icons;
-        let (open, folder, clear, objects, eye, colours) =
-            (&icons.open, &icons.folder, &icons.clear, &icons.objects, &icons.eye, &icons.colours);
+        let (open, folder, clear, objects, eye, colours, arrange) =
+            (&icons.open, &icons.folder, &icons.clear, &icons.objects, &icons.eye, &icons.colours, &icons.arrange);
         let (show_objects, color_models) = (self.show_objects, self.color_models);
         let button = |ui: &mut egui::Ui, icon: &egui::TextureHandle, label: &str, on: bool, hint: &str| {
             tool_button(ui, icon, label, text, on).on_hover_text(hint).clicked()
         };
-        let mut clicked = [false; 6];
+        let mut clicked = [false; 7];
         ui.horizontal(|ui| {
             clicked[0] = button(ui, open, "Open", false, "Open files (Ctrl+O)");
-            clicked[1] = button(ui, folder, "Folder", false, "Open all models in a folder");
+            clicked[1] = button(ui, folder, "Folder", false, "Browse a folder in the Files tab");
             clicked[2] = button(ui, clear, "Clear", false, "Clear scene: remove everything (Ctrl+W)");
             ui.separator();
             clicked[3] = button(ui, objects, "Objects", show_objects, "Show/hide the objects panel");
             clicked[4] = button(ui, eye, "Hide all", false, "Hide or show all objects (H)");
             clicked[5] = button(ui, colours, "Colours", color_models, "Give every model its own colour");
+            clicked[6] = button(ui, arrange, "Arrange", false, "Spread the models out so they do not overlap (A)");
         });
         if clicked[0] {
             self.open_dialog(&ctx);
         }
         if clicked[1] {
-            self.open_folder_dialog(&ctx);
+            self.open_folder_dialog();
         }
         if clicked[2] {
             self.clear();
@@ -752,6 +778,9 @@ impl MeshPeekApp {
         }
         if clicked[5] {
             self.set_color_models(!self.color_models);
+        }
+        if clicked[6] {
+            self.arrange();
         }
     }
 
@@ -779,80 +808,12 @@ impl MeshPeekApp {
         });
     }
 
-    /// The Files tab: the browsed folder or archive, with a tick box per model file.
+    /// The Files tab: the file browser; double-clicked and added files go into the scene.
     fn files_panel(&mut self, ui: &mut egui::Ui) {
-        let ctx = ui.ctx().clone();
-        ui.horizontal(|ui| {
-            if ui.button("Folder…").clicked() {
-                self.open_folder_dialog(&ctx);
-            }
-            let can_open = !self.selected.is_empty();
-            if ui.add_enabled(can_open, egui::Button::new(format!("Open selected ({})", self.selected.len()))).clicked()
-            {
-                let picked: Vec<PathBuf> = std::mem::take(&mut self.selected).into_iter().collect();
-                self.open_files(&ctx, picked);
-            }
-            if ui.add_enabled(self.browse_root.is_some(), egui::Button::new("⟳")).on_hover_text("Refresh").clicked() {
-                let root = self.browse_root.clone();
-                let _ = self.set_browse_root(root);
-            }
-        });
-        let Some(tree) = self.tree.take() else {
-            ui.weak("Open a folder or a file to list the models next to it.");
-            return;
-        };
-        let mut to_open = None;
-        egui::ScrollArea::both().auto_shrink(false).show(ui, |ui| {
-            if let Some(root) = &self.browse_root {
-                ui.label(RichText::new(root.display().to_string()).weak());
-            }
-            if tree.children.is_empty() {
-                ui.weak("No model files here.");
-            }
-            for child in &tree.children {
-                self.tree_node(ui, child, &mut to_open);
-            }
-        });
-        self.tree = Some(tree);
-        if let Some(path) = to_open {
-            self.selected.remove(&path);
-            self.open_files(&ctx, [path]);
-        }
-    }
-
-    /// One folder (collapsible) or file row of the Files tab; a clicked file name is put in `to_open`.
-    fn tree_node(&mut self, ui: &mut egui::Ui, node: &Node, to_open: &mut Option<PathBuf>) {
-        let name = file_name(&node.path);
-        if node.is_dir {
-            egui::CollapsingHeader::new(format!("📁 {name}"))
-                .id_salt((self.archive_models.is_some(), &node.path)) // own state: archive folders start open
-                .default_open(self.archive_models.is_some())
-                .show(ui, |ui| {
-                    if node.path.is_dir() {
-                        // a real folder (not a folder inside an archive)
-                        ui.horizontal(|ui| {
-                            if ui.small_button("Open folder").clicked() {
-                                *to_open = Some(node.path.clone());
-                            }
-                        });
-                    }
-                    for child in &node.children {
-                        self.tree_node(ui, child, to_open);
-                    }
-                });
-        } else {
-            let mut ticked = self.selected.contains(&node.path);
-            let label = if sources::is_archive(&node.path) { format!("📦 {name}") } else { name };
-            let response = ui.checkbox(&mut ticked, label).on_hover_text(node.path.display().to_string());
-            if response.changed() {
-                if ticked {
-                    self.selected.insert(node.path.clone());
-                } else {
-                    self.selected.remove(&node.path);
-                }
-            }
-            if response.double_clicked() {
-                *to_open = Some(node.path.clone());
+        for action in self.browser.ui(ui) {
+            match action {
+                browser::Action::Add(paths) => self.open_files(&ui.ctx().clone(), paths),
+                browser::Action::PickFolder => self.open_folder_dialog(),
             }
         }
     }
@@ -1086,6 +1047,7 @@ impl MeshPeekApp {
     fn apply_theme(&mut self, ctx: &egui::Context) {
         let settings = self.draft.as_ref().unwrap_or(&self.settings); // Preferences previews live
         self.viewport.renderer.set_show_plates(settings.show_plate);
+        self.viewport.renderer.set_show_volume(settings.show_volume);
         let preference = match settings.theme.as_str() {
             "Light" => egui::ThemePreference::Light,
             "Dark" => egui::ThemePreference::Dark,
@@ -1127,7 +1089,7 @@ impl MeshPeekApp {
 
     /// Test hook: `MESHPEEK_SNAPSHOT_ACTIONS="theme=Light;center=Bust;view=Front;orbit=90,0;pan=100,0;dolly=4;controls;guide;about;preferences"` is
     /// applied once loading finished, before the snapshot. `preferences=<section>` opens Preferences on a section. `wait=<ms>` pauses (background preloads go on) and
-    /// takes the preloads that finished; `next` / `previous` step through the folder like the arrow keys.
+    /// takes the preloads that finished; `next` / `previous` step through the folder like the arrow keys; `files` shows the Files tab; `arrange` arranges the objects.
     fn snapshot_actions(&mut self, ctx: &egui::Context) {
         let Ok(actions) = std::env::var("MESHPEEK_SNAPSHOT_ACTIONS") else { return };
         for action in actions.split(';').map(str::trim) {
@@ -1171,6 +1133,8 @@ impl MeshPeekApp {
                     "guide" => self.show_guide = true,
                     "about" => self.show_about = true,
                     "preferences" => self.draft = Some(self.settings.clone()),
+                    "files" => self.panel_tab = PanelTab::Files,
+                    "arrange" => self.arrange(),
                     "next" => self.step_file(ctx, 1),
                     "previous" => self.step_file(ctx, -1),
                     _ => {}

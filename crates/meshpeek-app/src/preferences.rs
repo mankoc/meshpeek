@@ -112,6 +112,10 @@ fn page(ui: &mut egui::Ui, draft: &mut Settings, section: Section) {
             ui.label("Lychee files:");
             ui.checkbox(&mut draft.show_plate, "Show build plate");
             ui.end_row();
+            ui.label("");
+            ui.add_enabled(draft.show_plate, egui::Checkbox::new(&mut draft.show_volume, "Show printer volume"))
+                .on_hover_text("The box above the plate showing the printer's build height");
+            ui.end_row();
         }
         Section::Navigation => {
             ui.label("Mouse orbit:");

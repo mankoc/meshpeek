@@ -2,6 +2,25 @@
 
 All notable changes to MeshPeek, newest first.
 
+## 0.4.1 — 2026-10-12
+
+### Added
+- **Arrange** (toolbar button, *View → Arrange objects*, key **A**): moves the models on the XY plane so their
+  footprints do not overlap. Each model moves together with its supports; heights do not change, and the layout
+  stays centred where the scene was. Reloading the files restores the original positions.
+- **Hide the printer volume** (*View → Printer volume*, or *Preferences → Appearance*): keeps the build plate but
+  drops the box above it, and the view frames the plate instead of the whole volume.
+
+### Changed
+- **Files tab** is now a file browser: folders and archives expand in place (read when opened), double-clicking a
+  folder or archive goes into it and **Up** goes back out (up to the list of drives on Windows). Double-click a model
+  to add it to the scene, or select several (Ctrl+click, Shift+click) and use **Add selected**; **Add all** adds every
+  model of the current folder (of an archive folder including its sub-folders). All sub-folders are listed, not only
+  those holding models, so any folder can be reached.
+- *File → Open folder* shows the folder in the Files tab instead of loading every model in it.
+- Documentation moved to `docs/` (format specifications in `docs/formats/`); the obsolete Rust migration plan is
+  gone and the README has the build prerequisites.
+
 ## 0.4.0 — 2026-10-12
 
 ### Added

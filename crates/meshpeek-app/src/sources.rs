@@ -176,67 +176,6 @@ pub fn read_entry(archive: &Path, entry: &str) -> Result<Vec<u8>, String> {
     }
 }
 
-/// A folder listing for the Files tab: sub-folders first, then files, only what is openable.
-pub struct Node {
-    pub path: PathBuf,
-    pub children: Vec<Node>,
-    pub is_dir: bool,
-}
-
-impl Node {
-    /// Folders first, then by name, case-insensitively, at every level.
-    fn sort(&mut self) {
-        self.children.iter_mut().for_each(Node::sort);
-        self.children.sort_by_key(|n| (!n.is_dir, n.path.to_string_lossy().to_lowercase()));
-    }
-}
-
-/// Tree of `dir` containing only models, archives and the folders that lead to them.
-pub fn scan(dir: &Path, depth: usize) -> Node {
-    let mut children = Vec::new();
-    if depth > 0 {
-        if let Ok(read) = std::fs::read_dir(dir) {
-            for entry in read.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    let node = scan(&path, depth - 1);
-                    if !node.children.is_empty() {
-                        children.push(node);
-                    }
-                } else if is_model(&path) || is_archive(&path) {
-                    children.push(Node { path, children: Vec::new(), is_dir: false });
-                }
-            }
-        }
-    }
-    let mut node = Node { path: dir.to_path_buf(), children, is_dir: true };
-    node.sort();
-    node
-}
-
-/// Tree of the model `entries` of `archive`, as if the archive were a folder.
-pub fn archive_tree(archive: &Path, entries: &[String]) -> Node {
-    let mut root = Node { path: archive.to_path_buf(), children: Vec::new(), is_dir: true };
-    for entry in entries {
-        let mut node = &mut root;
-        let parts: Vec<&str> = entry.split('/').filter(|p| !p.is_empty()).collect();
-        for (i, part) in parts.iter().enumerate() {
-            let path = node.path.join(part);
-            let is_dir = i + 1 < parts.len();
-            let at = match node.children.iter().position(|c| c.path == path) {
-                Some(at) => at,
-                None => {
-                    node.children.push(Node { path, children: Vec::new(), is_dir });
-                    node.children.len() - 1
-                }
-            };
-            node = &mut node.children[at];
-        }
-    }
-    root.sort();
-    root
-}
-
 #[cfg(test)]
 mod tests {
     use std::io::Write;
@@ -277,9 +216,5 @@ mod tests {
         let mut problems = Vec::new();
         let found = expand([virtual_path.clone()], &mut problems);
         assert!(matches!(&found[..], [Source::Memory { name, data }] if *name == virtual_path && data == b"ply"));
-
-        let tree = archive_tree(&archive, &list_models(&archive).unwrap());
-        assert_eq!(tree.children.len(), 2);
-        assert!(tree.children[0].is_dir && !tree.children[1].is_dir); // folder "inner" first, then a.stl
     }
 }

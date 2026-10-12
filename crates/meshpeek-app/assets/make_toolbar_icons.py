@@ -93,7 +93,15 @@ def colours():
     save(img, "colours")
 
 
+def arrange():
+    """Four tiles side by side: objects spread out so they do not overlap."""
+    img, d = canvas()
+    for x, y, c, cd in ((36, 36, TEAL, TEAL_D), (208, 36, AMBER, AMBER_D), (36, 208, AMBER, AMBER_D), (208, 208, TEAL, TEAL_D)):
+        d.rounded_rectangle((x, y, x + 140, y + 140), radius=24, fill=c + (255,), outline=cd + (255,), width=12)
+    save(img, "arrange")
+
+
 if __name__ == "__main__":
-    for make in (open_file, open_folder, clear, objects, eye, colours):
+    for make in (open_file, open_folder, clear, objects, eye, colours, arrange):
         make()
     print("wrote", OUT)

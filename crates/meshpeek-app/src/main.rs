@@ -7,6 +7,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // no console window in release builds
 
 mod app;
+mod arrange;
+mod browser;
 mod help;
 mod loading;
 mod preferences;
