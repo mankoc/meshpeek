@@ -110,7 +110,6 @@ Windows and Ubuntu machines and attaches them to the run. Tick *publish* to also
 | `crates/meshpeek-core` | File formats (STL, OBJ, PLY, `.lys` and `.chitubox` incl. supports), meshes and scenes. No GPU/UI code. |
 | `crates/meshpeek-render` | wgpu renderer: GPU meshes, camera, shading, plate, axes. No UI code. |
 | `crates/meshpeek-app` | The `meshpeek` desktop app (eframe/egui), icon, installer definitions. |
-| `chitu2lys` | Command-line converter from CHITUBOX projects to Lychee scenes (see `chitu2lys/README.md`). |
 | `crates/meshpeek-tools` | `meshpeek-info`, `lys-dump`, `meshpeek-bench`, `meshpeek-gen`. |
 | `samples/` | Sample models (Git LFS) and the reference data the golden tests compare against. |
 | `scripts/` | Build and packaging scripts. |

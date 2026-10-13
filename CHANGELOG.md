@@ -8,15 +8,6 @@ All notable changes to MeshPeek, newest first.
 - **Help → Check for updates**: asks GitHub for the latest MeshPeek release; when it is newer than the running
   version, shows its release notes and a button to the download page. MeshPeek only goes online when asked, and
   uses the system's `curl` (built into Windows 10 and 11) rather than shipping its own network code.
-- **chitu2lys** (new command-line tool, folder `chitu2lys/`): converts a CHITUBOX project into a Lychee scene. Models
-  keep their place and lift. CHITUBOX's support trees are rebuilt with Lychee's own, editable support types along
-  the same paths: each tree becomes a support on the same foot (or on the model, or on the trunk it leans on) and
-  a branch for every other tip, starting where CHITUBOX's branches meet and keeping their bends; CHITUBOX's braces
-  become Lychee braces between the same trunks; trunk, branch and tip diameters and the square foot pads keep their
-  size. About 98–99.9 % of CHITUBOX's support paths are drawn exactly (the tool reports it); the rest are trees on
-  the model that bend more often than a Lychee support can, which are drawn within about a millimetre. The printer
-  and settings come from a built-in template or from `--template`. **chitu2lys-gui** does the same in a small
-  window: drop projects on it, pick the output folder and printer, convert several at once.
 
 ## 0.4.1 — 2026-10-12
 

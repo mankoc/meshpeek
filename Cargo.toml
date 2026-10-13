@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/meshpeek-core", "crates/meshpeek-render", "crates/meshpeek-app", "crates/meshpeek-tools", "chitu2lys"]
+members = ["crates/meshpeek-core", "crates/meshpeek-render", "crates/meshpeek-app", "crates/meshpeek-tools"]
 
 [workspace.package]
 version = "0.4.1"

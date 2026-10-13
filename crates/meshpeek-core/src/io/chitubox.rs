@@ -41,13 +41,8 @@ const NO_SUPPORTS: u32 = u32::MAX;
 /// Size of a support-part entry and the value its first word always holds.
 const PART: usize = 72;
 const PART_MARKER: u32 = 0xEA34_2389;
-/// Offsets inside a part entry: its type, end points, sizes, the byte range of its triangles and the tip depth.
+/// Offsets inside a part entry: its type and the byte range of its triangles.
 const PART_TYPE: usize = 4;
-const PART_A: usize = 8;
-const PART_B: usize = 20;
-const PART_SIZE_A: usize = 32;
-const PART_SIZE_B: usize = 36;
-const PART_DEPTH_A: usize = 48;
 const PART_MESH: usize = 40;
 const PART_MESH_SIZE: usize = 44;
 /// Part types that touch the model: tips from above (1) and from below (2).
@@ -60,84 +55,52 @@ pub fn load(path: &Path) -> Result<Scene> {
 
 /// Parse a `.chitubox` project already in memory; `path` names the file in errors and in the objects.
 pub fn load_bytes(data: &[u8], path: &Path) -> Result<Scene> {
-    let (objects, skipped) = objects(data).map_err(|e| LoadError::format(format!("{}: {e}", path.display())))?;
-    let mut scene = Scene { skipped, ..Scene::default() };
-    for object in objects {
-        object.add_to(&mut scene, data, path);
-    }
-    Ok(scene)
-}
-
-/// One object of a project, as stored: where its meshes are and where it stands.
-pub struct Object {
-    /// Name as CHITUBOX shows it (usually the source file name).
-    pub name: String,
-    /// Centre of the model on the plate.
-    pub x: f64,
-    pub y: f64,
-    /// Gap between the plate and the model's lowest point.
-    pub lift: f64,
-    /// Byte range of the model's triangles (read them with [`mesh`]); the model is centred on the origin.
-    pub model: (usize, usize),
-    /// The supports, when the file has readable ones.
-    pub supports: Option<Supports>,
-}
-
-/// An object's supports: where their triangles are and the parts they are made of.
-pub struct Supports {
-    /// Byte range of all support triangles (read them with [`mesh`]), in the model's frame.
-    pub range: (usize, usize),
-    /// The parts (empty for files whose part list could not be read).
-    pub parts: Vec<Part>,
-}
-
-/// One support part: a tip, column, brace, joint, foot cone or foot pad (`CHITUBOX_FILE_FORMAT.md`, 6.5).
-#[derive(Debug, Clone, PartialEq)]
-pub struct Part {
-    /// Part type: 1 top tip, 2 bottom tip, 3 column or brace, 4 foot cone, 5 foot pad, 7 contact ball, 9 joint,
-    /// 12 link rod.
-    pub kind: u32,
-    /// End points in the model's frame (for a top tip, `a` touches the model and `b` is below).
-    pub a: DVec3,
-    pub b: DVec3,
-    /// Radius at `a` and at `b` (for foot pads: see the format notes).
-    pub size_a: f64,
-    pub size_b: f64,
-    /// For tips: how deep `a` lies inside the model.
-    pub depth_a: f64,
-    /// Byte range of this part's triangles (read them with [`mesh`]).
-    pub mesh: (usize, usize),
-}
-
-/// The objects of a project (in table order) and the objects that could not be read, as `"<name>: <reason>"`.
-pub fn objects(data: &[u8]) -> std::result::Result<(Vec<Object>, Vec<String>), String> {
+    let bad = |what: &str| LoadError::format(format!("{}: {what}", path.display()));
     if word(data, 0) != Some(MAGIC) {
-        return Err("not a CHITUBOX project (unknown file signature)".into());
+        return Err(bad("not a CHITUBOX project (unknown file signature)"));
     }
     let count = word(data, 4).unwrap_or(0) as usize;
     let table = word(data, 8).unwrap_or(0) as usize;
     let fits = count.checked_mul(SLOT).and_then(|size| size.checked_add(table)).is_some_and(|end| end <= data.len());
     if count == 0 || !fits {
-        return Err("the object table is missing or cut short".into());
+        return Err(bad("the object table is missing or cut short"));
     }
-    let (mut objects, mut skipped) = (Vec::new(), Vec::new());
+    let mut scene = Scene::default();
     for i in 0..count {
         let slot = &data[table + i * SLOT..table + (i + 1) * SLOT];
         let name = slot_name(slot, i);
-        match Object::read(data, slot, name.clone()) {
-            Ok(object) => objects.push(object),
-            Err(reason) => skipped.push(format!("{name}: {reason}")),
+        match Entry::read(data, slot) {
+            Ok(entry) => entry.add_to(&mut scene, data, name, path),
+            Err(reason) => scene.skipped.push(format!("{name}: {reason}")),
         }
     }
-    if objects.is_empty() {
-        return Err("no readable objects".into());
+    if scene.objects.is_empty() {
+        return Err(bad("no readable objects"));
     }
-    Ok((objects, skipped))
+    Ok(scene)
 }
 
-impl Object {
+/// One object of the table: where its meshes are and where it stands.
+struct Entry {
+    /// Centre of the model on the plate (x, y) and its lift: the gap between the plate and the model's bottom.
+    x: f64,
+    y: f64,
+    lift: f64,
+    /// Byte range of the model's triangles.
+    model: (usize, usize),
+    /// The supports, when the file has readable ones.
+    supports: Option<Supports>,
+}
+
+/// Where an object's support triangles are, and how many points of the model they touch.
+struct Supports {
+    range: (usize, usize),
+    contacts: Option<usize>,
+}
+
+impl Entry {
     /// Read and check a slot against the file size.
-    fn read(data: &[u8], slot: &[u8], name: String) -> std::result::Result<Self, String> {
+    fn read(data: &[u8], slot: &[u8]) -> std::result::Result<Self, String> {
         let float = |at: usize| f32::from_le_bytes(slot[at..at + 4].try_into().unwrap()) as f64;
         let at = |offset: usize| word(slot, offset).unwrap_or(0) as usize;
         let model = (at(SLOT_MESH), at(SLOT_MESH_SIZE));
@@ -150,26 +113,25 @@ impl Object {
         if ![x, y, lift].iter().all(|v| v.is_finite()) {
             return Err("its position is not a number".into());
         }
-        Ok(Self { name, x, y, lift, model, supports })
+        Ok(Self { x, y, lift, model, supports })
     }
 
     /// Add the model (and its supports, as a child) to `scene`, placed on the plate.
-    fn add_to(self, scene: &mut Scene, data: &[u8], path: &Path) {
-        let mesh = mesh(data, self.model);
+    fn add_to(self, scene: &mut Scene, data: &[u8], name: String, path: &Path) {
+        let mesh = triangles(data, self.model);
         let bottom = mesh.bounds().map_or(0.0, |(lo, _)| lo[2] as f64);
         let transform = DMat4::from_translation(DVec3::new(self.x, self.y, self.lift - bottom));
         let mut info = vec![("Lift".to_string(), format!("{:.2} mm", self.lift))];
-        if let Some(found) = self.supports.as_ref().filter(|s| !s.parts.is_empty()) {
-            let contacts = found.parts.iter().filter(|p| CONTACT_TYPES.contains(&p.kind)).count();
+        if let Some(contacts) = self.supports.as_ref().and_then(|s| s.contacts) {
             info.push(("Contact points".to_string(), contacts.to_string()));
         }
-        let mut model = SceneObject::new(self.name, mesh, path);
+        let mut model = SceneObject::new(name, mesh, path);
         model.transform = transform;
         model.info = info.clone();
         let parent = scene.objects.len();
         scene.objects.push(model);
         if let Some(found) = self.supports {
-            let mut supports = SceneObject::new("Supports", self::mesh(data, found.range), path);
+            let mut supports = SceneObject::new("Supports", triangles(data, found.range), path);
             supports.kind = ObjectKind::Support;
             supports.transform = transform;
             supports.parent = Some(parent);
@@ -187,19 +149,19 @@ fn supports(data: &[u8], block: usize, model: (usize, usize)) -> Option<Supports
         return Some(found);
     }
     let range = (word(data, block.checked_add(8)?)? as usize, word(data, block.checked_add(12)?)? as usize);
-    (range.0 == model.0 + model.1 && triangles_fit(data, range)).then_some(Supports { range, parts: Vec::new() })
+    (range.0 == model.0 + model.1 && triangles_fit(data, range)).then_some(Supports { range, contacts: None })
 }
 
 /// Read the part list of a support block: every entry must carry the part marker and the parts' triangles must
 /// follow one another.
 fn part_list(data: &[u8], block: usize) -> Option<Supports> {
-    let count = word(data, block)? as usize;
+    let parts = word(data, block)? as usize;
     let list = word(data, block.checked_add(4)?)? as usize;
-    let end = count.checked_mul(PART)?.checked_add(list)?;
-    if count == 0 || end > data.len() {
+    let end = parts.checked_mul(PART)?.checked_add(list)?;
+    if parts == 0 || end > data.len() {
         return None;
     }
-    let (mut start, mut next, mut parts) = (None, 0usize, Vec::with_capacity(count));
+    let (mut start, mut next, mut contacts) = (None, 0usize, 0);
     for entry in data[list..end].chunks_exact(PART) {
         if word(entry, 0)? != PART_MARKER {
             return None;
@@ -210,44 +172,10 @@ fn part_list(data: &[u8], block: usize) -> Option<Supports> {
         }
         start.get_or_insert(offset);
         next = offset.checked_add(size)?;
-        let float = |at: usize| f32::from_le_bytes(entry[at..at + 4].try_into().unwrap()) as f64;
-        let point = |at: usize| DVec3::new(float(at), float(at + 4), float(at + 8));
-        parts.push(Part {
-            kind: word(entry, PART_TYPE)?,
-            a: point(PART_A),
-            b: point(PART_B),
-            size_a: float(PART_SIZE_A),
-            size_b: float(PART_SIZE_B),
-            depth_a: float(PART_DEPTH_A),
-            mesh: (offset, size),
-        });
+        contacts += CONTACT_TYPES.contains(&word(entry, PART_TYPE)?) as usize;
     }
     let range = (start?, next - start?);
-    triangles_fit(data, range).then_some(Supports { range, parts })
-}
-
-/// The preview image as `(width, height, RGB pixels row by row)`, when the file has one
-/// (`CHITUBOX_FILE_FORMAT.md`, section 4).
-pub fn preview(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
-    let header = word(data, 12)? as usize;
-    if header == 0 {
-        return None;
-    }
-    let (width, height) = (word(data, header)?, word(data, header + 4)?);
-    let (offset, size) = (word(data, header + 8)? as usize, word(data, header + 12)? as usize);
-    let encoded = data.get(offset..offset.checked_add(size)?)?;
-    let pixels = (width as usize).checked_mul(height as usize)?;
-    let mut rgb = Vec::with_capacity(pixels * 3);
-    let mut words = encoded.chunks_exact(2).map(|w| u16::from_le_bytes([w[0], w[1]]));
-    while let Some(colour) = words.next() {
-        let run = if colour & 0x20 != 0 { (words.next()? & 0x0FFF) as usize + 1 } else { 1 };
-        let channel = |shift: u16| ((colour >> shift) & 0x1F) as u32 * 255 / 31;
-        let pixel = [channel(11) as u8, channel(6) as u8, channel(0) as u8];
-        for _ in 0..run.min(pixels.saturating_sub(rgb.len() / 3)) {
-            rgb.extend_from_slice(&pixel);
-        }
-    }
-    (rgb.len() == pixels * 3).then_some((width, height, rgb))
+    triangles_fit(data, range).then_some(Supports { range, contacts: Some(contacts) })
 }
 
 /// The object's name: the zero-terminated text at the start of its slot.
@@ -270,7 +198,7 @@ fn triangles_fit(data: &[u8], (offset, size): (usize, usize)) -> bool {
 
 /// The triangles in `(offset, size)` as an indexed mesh (shared corners merged). The data is not 4-byte
 /// aligned in the file, so it is read value by value.
-pub fn mesh(data: &[u8], (offset, size): (usize, usize)) -> Mesh {
+fn triangles(data: &[u8], (offset, size): (usize, usize)) -> Mesh {
     let float = |b: &[u8]| f32::from_le_bytes(b.try_into().unwrap());
     let corners: Vec<[f32; 3]> = data[offset..offset + size]
         .par_chunks_exact(12)
