@@ -2,7 +2,7 @@
 Type=Application
 Name=MeshPeek
 GenericName=3D Model Viewer
-Comment=Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys and CHITUBOX .chitubox files
+Comment=Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox and .ctb files
 Exec=meshpeek %F
 Icon=meshpeek
 Terminal=false

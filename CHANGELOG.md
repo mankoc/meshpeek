@@ -2,6 +2,20 @@
 
 All notable changes to MeshPeek, newest first.
 
+## 0.5.5 — 2026-10-14
+
+### Added
+- **CHITUBOX print files** (`.ctb`, versions 2 to 4, and the encrypted files of newer CHITUBOX versions): the
+  sliced layers are stacked and the solid they print is rebuilt (surface nets on cells of about 0.1 mm,
+  anti-aliasing included), model and supports as one object on the printer's plate. The information window shows
+  the printer, the CHITUBOX version, layers, exposures, print time, screen and cell size. Encrypted files are
+  decrypted with the key UVtools publishes. The installer offers MeshPeek for `.ctb` files; the format is
+  described in `docs/formats/CTB_NOTES.md`.
+
+### Fixed
+- The Windows program gives its main thread an 8 MB stack instead of 1 MB. It crashed twice with a stack
+  overflow when opening a big print file right after being built; the cause was not found.
+
 ## 0.5.0 — 2026-10-14
 
 ### Added

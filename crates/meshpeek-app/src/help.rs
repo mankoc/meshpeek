@@ -64,7 +64,8 @@ pub const GUIDE: &[(&str, &[&str])] = &[
     (
         "Opening files",
         &[
-            "MeshPeek opens STL (binary and ASCII), OBJ, PLY, 3MF, Lychee Slicer .lys and CHITUBOX .chitubox files. \
+            "MeshPeek opens STL (binary and ASCII), OBJ, PLY, 3MF, Lychee Slicer .lys, CHITUBOX .chitubox projects \
+             and CHITUBOX .ctb print files. \
              Use File > Open (Ctrl+O), File > Open Recent, drag files onto the window, or pass them on the \
              command line.",
             "Several files can be open at once; they keep their own coordinates, so parts exported from one \
@@ -135,6 +136,17 @@ pub const GUIDE: &[(&str, &[&str])] = &[
              (i) icon shows the lift and the number of contact points.",
             "Projects saved by older CHITUBOX versions open too, supports included. The printer's build plate is \
              not stored in these files, so none is drawn.",
+        ],
+    ),
+    (
+        "CHITUBOX .ctb print files",
+        &[
+            "A print file holds no model, only the image of every layer the printer exposes. MeshPeek stacks the \
+             layers and rebuilds the solid they print, model and supports as one object, standing on the \
+             printer's plate. The surface is rebuilt from cells of about a tenth of a millimetre (coarser for very \
+             big prints), so the finest details are softened.",
+            "The (i) icon shows the printer, the CHITUBOX version, the layers, exposures, print time, the screen \
+             resolution and the cell size used. The encrypted print files of newer CHITUBOX versions open too.",
         ],
     ),
     (

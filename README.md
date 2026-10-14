@@ -1,6 +1,6 @@
 # MeshPeek
 
-Fast viewer for STL, OBJ, PLY, 3MF, Lychee `.lys` and CHITUBOX `.chitubox` files, written in Rust. Renders on the GPU, or on the CPU
+Fast viewer for STL, OBJ, PLY, 3MF, Lychee `.lys`, CHITUBOX `.chitubox` and `.ctb` files, written in Rust. Renders on the GPU, or on the CPU
 when there is no usable GPU.
 
 ## Supported files
@@ -11,6 +11,7 @@ when there is no usable GPU.
 | 3MF | Every object placed on the build plate, with its colours: colour properties, and from PrusaSlicer, Bambu Studio and OrcaSlicer each part's extruder colour and the painted colours, plus the build plates |
 | Lychee Slicer `.lys` | Every model placed as in Lychee, with its supports, rafts and the build plate |
 | CHITUBOX `.chitubox` | Every model where it stands on the plate, with the supports CHITUBOX generated (also from older CHITUBOX versions) |
+| CHITUBOX `.ctb` print files | The solid the sliced layers print, rebuilt from the layer images, on the printer's plate (also the encrypted files of newer CHITUBOX versions) |
 
 Models can also be opened from inside ZIP, 7z and RAR archives.
 
@@ -108,7 +109,7 @@ Windows and Ubuntu machines and attaches them to the run. Tick *publish* to also
 
 | Path | Purpose |
 |---|---|
-| `crates/meshpeek-core` | File formats (STL, OBJ, PLY, 3MF, `.lys` and `.chitubox` incl. supports), meshes and scenes. No GPU/UI code. |
+| `crates/meshpeek-core` | File formats (STL, OBJ, PLY, 3MF, `.lys` and `.chitubox` incl. supports, `.ctb`), meshes and scenes. No GPU/UI code. |
 | `crates/meshpeek-render` | wgpu renderer: GPU meshes, camera, shading, plate, axes. No UI code. |
 | `crates/meshpeek-app` | The `meshpeek` desktop app (eframe/egui), icon, installer definitions. |
 | `crates/meshpeek-tools` | `meshpeek-info`, `lys-dump`, `meshpeek-bench`, `meshpeek-gen`. |
@@ -117,6 +118,7 @@ Windows and Ubuntu machines and attaches them to the run. Tick *publish* to also
 | `docs/` | Benchmarks, manual test checklist, to-do list. |
 | `docs/formats/LYS_FILE_FORMAT.md` | Lychee `.lys` format notes. |
 | `docs/formats/CHITUBOX_FILE_FORMAT.md` | CHITUBOX `.chitubox` project format specification (reverse-engineered). |
+| `docs/formats/CTB_NOTES.md` | The CHITUBOX `.ctb` print file format and how MeshPeek rebuilds the solid from its layers. |
 | `docs/formats/3MF_NOTES.md` | What MeshPeek reads from 3MF files, including the slicers' part, colour, painting and plate data. |
 
 The original Python implementation is kept on the `python` branch.
