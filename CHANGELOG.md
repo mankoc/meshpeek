@@ -2,12 +2,32 @@
 
 All notable changes to MeshPeek, newest first.
 
-## Unreleased
+## 0.5.0 — 2026-10-14
 
 ### Added
+- **3MF files** (`.3mf`): every object the file places on the build plate, its parts joined, with the
+  Production extension's objects in their own model files (Bambu Studio, OrcaSlicer) and the file's unit. Files
+  from PrusaSlicer, Bambu Studio and OrcaSlicer show their build plates (all plates of a Bambu project), object
+  names and colours: each part in its extruder's or filament's colour, with the colours painted on the model
+  (multi-material painting, also where it subdivides triangles); modifiers, negative volumes and support
+  blockers or enforcers are left out. Other files show their colour properties (`basematerials`, `colorgroup`). A
+  file that uses one colour is shown in MeshPeek's model colour. 3MF is offered by Open and the Files tab, and
+  the installer registers it for *Open with*. The format notes are in `docs/formats/3MF_NOTES.md`.
 - **Help → Check for updates**: asks GitHub for the latest MeshPeek release; when it is newer than the running
   version, shows its release notes and a button to the download page. MeshPeek only goes online when asked, and
   uses the system's `curl` (built into Windows 10 and 11) rather than shipping its own network code.
+
+### Changed
+- The toolbar's **Colours** button is now **Colour objects**. While it is on, each model's name in the Objects
+  panel is shown in the model's colour (models with colours of their own, such as 3MF files, keep theirs).
+
+### Also in this release
+The changes of 0.4.1, which was not released on its own:
+- **Files tab** is a file browser: folders and archives expand in place, double-click goes into them and **Up**
+  back out; double-click a model to add it, or select several and use **Add selected** / **Add all**.
+- **Arrange** (toolbar, *View → Arrange objects*, key **A**) spreads the models out on the plate so they do not
+  overlap, each with its supports.
+- **Hide the printer volume** (*View → Printer volume*): keeps the build plate, drops the box above it.
 
 ## 0.4.1 — 2026-10-12
 

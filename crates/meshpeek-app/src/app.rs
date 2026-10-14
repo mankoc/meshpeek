@@ -39,6 +39,8 @@ struct Entry {
     /// The file it was loaded from.
     source: PathBuf,
     triangles: usize,
+    /// The mesh has colours of its own (3MF, PLY, OBJ), drawn instead of the model colour.
+    own_colours: bool,
     /// Label/value pairs for the information window.
     info: Vec<(String, String)>,
 }
@@ -198,7 +200,7 @@ impl MeshPeekApp {
             preload_results: channel(),
             preloaded_for: None,
             preferences_section: preferences::Section::default(),
-            status: "Open or drop STL, OBJ, PLY, LYS or CHITUBOX files".into(),
+            status: "Open or drop STL, OBJ, PLY, 3MF, LYS or CHITUBOX files".into(),
             wireframe: false,
             show_objects: true,
             show_toolbar: true,
@@ -351,7 +353,7 @@ impl MeshPeekApp {
             }
             for obj in file.objects {
                 let style = self.style(obj.kind, self.model_count(), &self.settings);
-                let (kind, triangles) = (obj.kind, obj.mesh.triangles);
+                let (kind, triangles, own_colours) = (obj.kind, obj.mesh.triangles, obj.mesh.has_colors);
                 let id = self.viewport.renderer.add_object(
                     &self.render_state.device,
                     obj.mesh,
@@ -367,6 +369,7 @@ impl MeshPeekApp {
                     visible: obj.visible,
                     source: path.clone(),
                     triangles,
+                    own_colours,
                     info: obj.info,
                 });
             }
@@ -765,7 +768,8 @@ impl MeshPeekApp {
             ui.separator();
             clicked[3] = button(ui, objects, "Objects", show_objects, "Show/hide the objects panel");
             clicked[4] = button(ui, eye, "Hide all", false, "Hide or show all objects (H)");
-            clicked[5] = button(ui, colours, "Colours", color_models, "Give every model its own colour");
+            let hint = "Give every model its own colour, also its name in the objects panel";
+            clicked[5] = button(ui, colours, "Colour objects", color_models, hint);
             clicked[6] = button(ui, arrange, "Arrange", false, "Spread the models out so they do not overlap (A)");
         });
         if clicked[0] {
@@ -791,8 +795,25 @@ impl MeshPeekApp {
         }
     }
 
+    /// The colour of each entry's name in the Objects tab: with "Colour each model", a model's own colour (models
+    /// whose mesh has colours of its own keep the text colour, as do supports).
+    fn name_colours(&self) -> Vec<Option<Color32>> {
+        let mut models = 0;
+        self.entries
+            .iter()
+            .map(|entry| {
+                let model = entry.kind == ObjectKind::Model;
+                let colour = MODEL_COLORS[models % MODEL_COLORS.len()];
+                models += model as usize;
+                (self.color_models && model && !entry.own_colours)
+                    .then(|| Color32::from_rgb(colour[0], colour[1], colour[2]))
+            })
+            .collect()
+    }
+
     /// The Objects tab: models with their supports, with visibility, centre and info buttons.
     fn objects_panel(&mut self, ui: &mut egui::Ui) {
+        let colours = self.name_colours();
         egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             for index in 0..self.entries.len() {
                 if self.entries[index].parent.is_some() {
@@ -801,12 +822,12 @@ impl MeshPeekApp {
                 let children: Vec<usize> =
                     (0..self.entries.len()).filter(|&c| self.entries[c].parent == Some(index)).collect();
                 if children.is_empty() {
-                    self.object_row(ui, index, 0.0);
+                    self.object_row(ui, index, 0.0, colours[index]);
                 } else {
                     let id = ui.make_persistent_id(("object", self.entries[index].id));
                     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
-                        .show_header(ui, |ui| self.object_row(ui, index, 0.0))
-                        .body(|ui| children.iter().for_each(|&c| self.object_row(ui, c, CHILD_INDENT)));
+                        .show_header(ui, |ui| self.object_row(ui, index, 0.0, colours[index]))
+                        .body(|ui| children.iter().for_each(|&c| self.object_row(ui, c, CHILD_INDENT, colours[c])));
                 }
             }
             for reason in &self.skipped {
@@ -825,8 +846,8 @@ impl MeshPeekApp {
         }
     }
 
-    /// One row of the Objects tab, `indent` points from the left.
-    fn object_row(&mut self, ui: &mut egui::Ui, index: usize, indent: f32) {
+    /// One row of the Objects tab, `indent` points from the left, the name in `colour` when given.
+    fn object_row(&mut self, ui: &mut egui::Ui, index: usize, indent: f32, colour: Option<Color32>) {
         ui.horizontal(|ui| {
             ui.add_space(indent);
             let entry = &mut self.entries[index];
@@ -841,7 +862,11 @@ impl MeshPeekApp {
             }
             let entry = &self.entries[index];
             let tooltip = format!("{}\n{} triangles", entry.source.display(), thousands(entry.triangles));
-            ui.label(&entry.name).on_hover_text(tooltip);
+            let name = match colour {
+                Some(colour) => RichText::new(&entry.name).color(colour),
+                None => RichText::new(&entry.name),
+            };
+            ui.label(name).on_hover_text(tooltip);
             // Models get a centre-on icon; only one model can be centred at a time.
             if entry.kind == ObjectKind::Model && entry.parent.is_none() {
                 let id = entry.id;
@@ -969,8 +994,10 @@ impl MeshPeekApp {
                     ui.add(egui::Image::new(&self.tool_icons.app).fit_to_exact_size(egui::vec2(128.0, 128.0)));
                     ui.vertical(|ui| {
                         ui.heading(format!("MeshPeek {}", env!("CARGO_PKG_VERSION")));
-                        ui.label("Fast viewer for STL, OBJ, PLY, Lychee .lys and CHITUBOX .chitubox files.");
-                        ui.label("Lychee and CHITUBOX scenes are shown with their supports.");
+                        ui.label("Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys and CHITUBOX .chitubox files.");
+                        ui.label(
+                            "Lychee and CHITUBOX scenes are shown with their supports, 3MF files with their colours.",
+                        );
                         ui.label("by MrIxolite");
                     });
                 });
@@ -1097,7 +1124,7 @@ impl MeshPeekApp {
 
     /// Test hook: `MESHPEEK_SNAPSHOT_ACTIONS="theme=Light;center=Bust;view=Front;orbit=90,0;pan=100,0;dolly=4;controls;guide;about;preferences"` is
     /// applied once loading finished, before the snapshot. `preferences=<section>` opens Preferences on a section. `wait=<ms>` pauses (background preloads go on) and
-    /// takes the preloads that finished; `next` / `previous` step through the folder like the arrow keys; `files` shows the Files tab; `arrange` arranges the objects; `updates` checks for updates.
+    /// takes the preloads that finished; `next` / `previous` step through the folder like the arrow keys; `files` shows the Files tab; `arrange` arranges the objects; `colours` colours each model; `updates` checks for updates.
     fn snapshot_actions(&mut self, ctx: &egui::Context) {
         let Ok(actions) = std::env::var("MESHPEEK_SNAPSHOT_ACTIONS") else { return };
         for action in actions.split(';').map(str::trim) {
@@ -1143,6 +1170,7 @@ impl MeshPeekApp {
                     "preferences" => self.draft = Some(self.settings.clone()),
                     "files" => self.panel_tab = PanelTab::Files,
                     "arrange" => self.arrange(),
+                    "colours" => self.set_color_models(true),
                     "updates" => self.updates.check(ctx),
                     "next" => self.step_file(ctx, 1),
                     "previous" => self.step_file(ctx, -1),

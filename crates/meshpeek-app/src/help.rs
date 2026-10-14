@@ -64,7 +64,7 @@ pub const GUIDE: &[(&str, &[&str])] = &[
     (
         "Opening files",
         &[
-            "MeshPeek opens STL (binary and ASCII), OBJ, PLY, Lychee Slicer .lys and CHITUBOX .chitubox files. \
+            "MeshPeek opens STL (binary and ASCII), OBJ, PLY, 3MF, Lychee Slicer .lys and CHITUBOX .chitubox files. \
              Use File > Open (Ctrl+O), File > Open Recent, drag files onto the window, or pass them on the \
              command line.",
             "Several files can be open at once; they keep their own coordinates, so parts exported from one \
@@ -106,6 +106,19 @@ pub const GUIDE: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        "3MF files",
+        &[
+            "Every object a 3MF file places on the build plate is shown where it stands, its parts joined. Files \
+             from PrusaSlicer, Bambu Studio and OrcaSlicer show the printer's build plates (all of a Bambu \
+             project's plates), the object names given there, and their colours: each part in the colour of its \
+             extruder or filament, with the colours painted on the model. Modifiers, negative volumes and support \
+             blockers or enforcers are left out, as they are not printed.",
+            "Other 3MF files show the colours they give their objects and triangles. A file that uses a single \
+             colour is shown in MeshPeek's model colour. The (i) icon shows the program that made the file, its \
+             title and designer, and how many parts and colours an object has.",
+        ],
+    ),
+    (
         "Lychee .lys files",
         &[
             "Models are placed as in Lychee, with the build plate. Supports, braces, mini supports and rafts are \
@@ -132,7 +145,9 @@ pub const GUIDE: &[(&str, &[&str])] = &[
              the support detail, whether OBJ files are Y-up (Blender, Maya and ZBrush export them that way), \
              the theme (light, dark or the system's), the mouse orbit style, the build plate and printer volume, preloading for the \
              arrow keys and the space mouse. Changing support detail or the OBJ axis reloads the open files.",
-            "View > Colour each model gives every model its own colour.",
+            "View > Colour each model (or Colour objects in the toolbar) gives every model its own colour, and \
+             its name in the Objects panel takes the same colour. Models with colours of their own, from 3MF, PLY \
+             or OBJ files, keep them.",
         ],
     ),
     (

@@ -5,6 +5,7 @@ pub mod lys;
 pub mod obj;
 pub mod ply;
 pub mod stl;
+pub mod threemf;
 
 use std::fs::File;
 use std::path::Path;
@@ -17,7 +18,7 @@ use crate::mesh::Mesh;
 use crate::scene::{Scene, SceneObject};
 
 /// Lower-case extensions (without the dot) that [`load`] understands.
-pub const SUPPORTED_EXTENSIONS: &[&str] = &["stl", "obj", "ply", "lys", "chitubox"];
+pub const SUPPORTED_EXTENSIONS: &[&str] = &["stl", "obj", "ply", "3mf", "lys", "chitubox"];
 
 /// Rotation of +90 degrees about X: a Y-up model (x, y, z) becomes Z-up (x, -z, y).
 pub const Y_UP_TO_Z_UP: DMat4 = DMat4::from_cols(
@@ -100,6 +101,8 @@ pub fn load_data(name: &Path, data: Data, options: &LoadOptions) -> Result<Scene
         lys::load_data(name, data, options.support_sides)?
     } else if ext == "chitubox" {
         chitubox::load_bytes(&data, name)?
+    } else if ext == "3mf" {
+        threemf::load_bytes(&data, name)?
     } else {
         let mut object = SceneObject::new(stem(name), parse_mesh(name, &data)?, name);
         if ext == "obj" && options.obj_y_up {

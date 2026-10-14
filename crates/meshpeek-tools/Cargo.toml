@@ -9,7 +9,7 @@ publish.workspace = true
 
 [dependencies]
 memory-stats = "1.2.0"
-meshpeek-core = { version = "0.4.1", path = "../meshpeek-core" }
-meshpeek-render = { version = "0.4.1", path = "../meshpeek-render" }
+meshpeek-core = { version = "0.5.0", path = "../meshpeek-core" }
+meshpeek-render = { version = "0.5.0", path = "../meshpeek-render" }
 pollster = "1.0.1"
 serde_json = "1.0.151"
