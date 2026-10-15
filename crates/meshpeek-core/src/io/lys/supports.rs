@@ -246,7 +246,7 @@ fn terminal(
 }
 
 /// A sphere (a capsule with both centres together).
-fn sphere(centre: DVec3, radius: f64, sides: usize) -> Mesh {
+pub(crate) fn sphere(centre: DVec3, radius: f64, sides: usize) -> Mesh {
     capsule(centre, centre + DVec3::Z * 1e-4, radius, radius, false, false, sides, sides / 2, sides / 2)
 }
 

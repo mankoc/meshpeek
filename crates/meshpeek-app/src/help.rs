@@ -65,7 +65,7 @@ pub const GUIDE: &[(&str, &[&str])] = &[
         "Opening files",
         &[
             "MeshPeek opens STL (binary and ASCII), OBJ, PLY, 3MF, Lychee Slicer .lys, CHITUBOX .chitubox projects \
-             and CHITUBOX .ctb print files. \
+             (.chitubox and .ctp) and CHITUBOX .ctb print files. \
              Use File > Open (Ctrl+O), File > Open Recent, drag files onto the window, or pass them on the \
              command line.",
             "Several files can be open at once; they keep their own coordinates, so parts exported from one \
@@ -129,13 +129,15 @@ pub const GUIDE: &[(&str, &[&str])] = &[
         ],
     ),
     (
-        "CHITUBOX .chitubox files",
+        "CHITUBOX .chitubox and .ctp files",
         &[
             "Every model of a CHITUBOX project is shown where it stands on the plate, at its lift height, with \
              the supports CHITUBOX generated for it (tips, columns, braces and foot pads exactly as saved). The \
              (i) icon shows the lift and the number of contact points.",
-            "Projects saved by older CHITUBOX versions open too, supports included. The printer's build plate is \
-             not stored in these files, so none is drawn.",
+            "Projects saved by older CHITUBOX versions open too, supports included. The newer .ctp projects \
+             store the supports as a list of parts (tips, columns, braces, joints, foot cones) without their \
+             shapes; MeshPeek builds the shapes, with as many facets as Preferences > Appearance > Support detail \
+             asks for. The printer's build plate is not stored in these files, so none is drawn.",
         ],
     ),
     (

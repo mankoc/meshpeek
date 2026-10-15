@@ -60,7 +60,7 @@
                     <Shortcut
                         Id='MeshPeekShortcut'
                         Name='MeshPeek'
-                        Description='Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox and .ctb files'
+                        Description='Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox, .ctp and .ctb files'
                         Target='[APPLICATIONFOLDER]meshpeek.exe'
                         WorkingDirectory='APPLICATIONFOLDER'
                         Icon='MeshPeekIcon' />
@@ -96,6 +96,7 @@
                     <RegistryValue Root='HKLM' Key='Software\Classes\.3mf\OpenWithProgids' Name='MeshPeek.Model' Type='string' Value='' />
                     <RegistryValue Root='HKLM' Key='Software\Classes\.lys\OpenWithProgids' Name='MeshPeek.Model' Type='string' Value='' />
                     <RegistryValue Root='HKLM' Key='Software\Classes\.chitubox\OpenWithProgids' Name='MeshPeek.Model' Type='string' Value='' />
+                    <RegistryValue Root='HKLM' Key='Software\Classes\.ctp\OpenWithProgids' Name='MeshPeek.Model' Type='string' Value='' />
                     <RegistryValue Root='HKLM' Key='Software\Classes\.ctb\OpenWithProgids' Name='MeshPeek.Model' Type='string' Value='' />
             </Component>
         </DirectoryRef>

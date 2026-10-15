@@ -2,6 +2,7 @@
 
 pub mod chitubox;
 pub mod ctb;
+pub mod ctp;
 pub mod lys;
 pub mod obj;
 pub mod ply;
@@ -19,7 +20,7 @@ use crate::mesh::Mesh;
 use crate::scene::{Scene, SceneObject};
 
 /// Lower-case extensions (without the dot) that [`load`] understands.
-pub const SUPPORTED_EXTENSIONS: &[&str] = &["stl", "obj", "ply", "3mf", "lys", "chitubox", "ctb"];
+pub const SUPPORTED_EXTENSIONS: &[&str] = &["stl", "obj", "ply", "3mf", "lys", "chitubox", "ctp", "ctb"];
 
 /// Rotation of +90 degrees about X: a Y-up model (x, y, z) becomes Z-up (x, -z, y).
 pub const Y_UP_TO_Z_UP: DMat4 = DMat4::from_cols(
@@ -104,6 +105,8 @@ pub fn load_data(name: &Path, data: Data, options: &LoadOptions) -> Result<Scene
         chitubox::load_bytes(&data, name)?
     } else if ext == "3mf" {
         threemf::load_bytes(&data, name)?
+    } else if ext == "ctp" {
+        ctp::load_bytes(&data, name, options.support_sides)?
     } else if ext == "ctb" {
         ctb::load_bytes(&data, name)?
     } else {
@@ -121,6 +124,7 @@ pub fn load_data(name: &Path, data: Data, options: &LoadOptions) -> Result<Scene
     let format = match ext.as_str() {
         "lys" => "Lychee scene (.lys)".to_string(),
         "chitubox" => "CHITUBOX project (.chitubox)".to_string(),
+        "ctp" => "CHITUBOX project (.ctp)".to_string(),
         "ctb" => "CHITUBOX print file (.ctb)".to_string(),
         other => format!("{} file", other.to_uppercase()),
     };

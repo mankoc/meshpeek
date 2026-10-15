@@ -1,6 +1,6 @@
 [package]
 name = "meshpeek-app"
-description = "Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox and .ctb files"
+description = "Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox, .ctp and .ctb files"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -21,8 +21,8 @@ hidapi = { version = "2.6.7", default-features = false, features = ["windows-nat
 image = { version = "0.25.9", default-features = false, features = ["png"] }
 log = "0.4.34"
 memory-stats = "1.2.0"
-meshpeek-core = { version = "0.5.5", path = "../meshpeek-core" }
-meshpeek-render = { version = "0.5.5", path = "../meshpeek-render" }
+meshpeek-core = { version = "0.5.6", path = "../meshpeek-core" }
+meshpeek-render = { version = "0.5.6", path = "../meshpeek-render" }
 rayon = "1.12.0"
 rfd = "0.17.2"
 serde = { version = "1.0.229", features = ["derive"] }
@@ -41,7 +41,7 @@ name = "meshpeek"
 maintainer = "MeshPeek contributors"
 copyright = "MeshPeek contributors"
 extended-description = """\
-Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox and .ctb files. Renders on the GPU, or on the CPU when no GPU \
+Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox, .ctp and .ctb files. Renders on the GPU, or on the CPU when no GPU \
 is available (Mesa lavapipe)."""
 depends = "$auto, mesa-vulkan-drivers"
 section = "graphics"

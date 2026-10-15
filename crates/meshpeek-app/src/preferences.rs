@@ -150,7 +150,7 @@ fn page(ui: &mut egui::Ui, draft: &mut Settings, section: Section) {
         Section::System => {
             ui.label("File types:");
             let hint =
-                "Windows decides which program opens STL, OBJ, PLY, 3MF, LYS, CHITUBOX and CTB files: pick MeshPeek there";
+                "Windows decides which program opens STL, OBJ, PLY, 3MF, LYS, CHITUBOX, CTP and CTB files: pick MeshPeek there";
             if ui.button("Make default app…").on_hover_text(hint).clicked() {
                 crate::app::open_default_apps_settings();
             }

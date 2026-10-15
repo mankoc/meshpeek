@@ -2,6 +2,15 @@
 
 All notable changes to MeshPeek, newest first.
 
+## 0.5.6 — 2026-10-15
+
+### Added
+- **CHITUBOX `.ctp` projects** (the newer CHITUBOX project files): every model where it stands on the plate, at its
+  lift, with its supports. The supports are stored as parts without shapes (tips, columns, braces, joints, foot
+  cones, link rods); MeshPeek builds the shapes, with the facets of *Support detail*. The (i) icon shows the lift
+  and the number of contact points. The layout, worked out from a sample file, is in `docs/formats/CTP_NOTES.md`;
+  the installer offers MeshPeek for `.ctp` files.
+
 ## 0.5.5 — 2026-10-14
 
 ### Added

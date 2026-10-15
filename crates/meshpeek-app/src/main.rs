@@ -1,4 +1,4 @@
-//! MeshPeek: fast viewer for STL, OBJ, PLY, 3MF, Lychee `.lys`, CHITUBOX `.chitubox` and `.ctb` files.
+//! MeshPeek: fast viewer for STL, OBJ, PLY, 3MF, Lychee `.lys`, CHITUBOX `.chitubox`, `.ctp` and `.ctb` files.
 //!
 //!     meshpeek [--cpu] [files...]
 //!
