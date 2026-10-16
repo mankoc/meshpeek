@@ -999,6 +999,10 @@ impl MeshPeekApp {
                             "Lychee and CHITUBOX scenes are shown with their supports, 3MF files with their colours, CTB print files as the solid their layers print.",
                         );
                         ui.label("by MrIxolite");
+                        // the project page, from the workspace's `repository` field
+                        let repository = env!("CARGO_PKG_REPOSITORY");
+                        ui.hyperlink_to(repository.trim_start_matches("https://"), repository)
+                            .on_hover_text("Source code, releases and issues on GitHub");
                     });
                 });
                 ui.separator();

@@ -2,6 +2,11 @@
 
 All notable changes to MeshPeek, newest first.
 
+## Unreleased
+
+### Added
+- **Help → About** links to the project page on GitHub (source code, releases and issues).
+
 ## 0.5.6 — 2026-10-15
 
 ### Added
