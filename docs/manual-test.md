@@ -33,7 +33,7 @@ Sample files are in `samples/` (Git LFS).
 - [ ] View → Objects panel hides and shows the panel.
 
 ## Preferences (Ctrl+,)
-- [ ] Changing model/support material and colour previews immediately; *Cancel* restores; *OK* keeps it after
+- [ ] Moving the model/support reflectiveness slider and changing the colour previews immediately; *Cancel* restores; *OK* keeps it after
       a restart.
 - [ ] Changing *Support detail* or *OBJ files: Y is up* and pressing OK reloads the open files.
 - [ ] PLY files with vertex colours keep their own colours.

@@ -2,10 +2,49 @@
 
 All notable changes to MeshPeek, newest first.
 
-## Unreleased
+## 0.5.7 — 2026-10-24
 
 ### Added
 - **Help → About** links to the project page on GitHub (source code, releases and issues).
+- **Background colour** (*Preferences → Appearance → Background*): tick *Own colour* and pick a colour to fill the 3D
+  view with it instead of the theme's gradient (e.g. white for screenshots).
+
+### Changed
+- **Reflectiveness slider** instead of the material choice (Matte, Plastic, Glossy, Metal) in *Preferences →
+  Appearance*, for models and for supports: it moves smoothly from matte (0 %) through plastic and gloss to metal
+  (100 %). A material chosen in an earlier version starts the slider at the same look.
+- **Faster loading from hard disks**: files are read from start to end in one pass before they are parsed, instead
+  of being paged in piecemeal while several threads parse them. A 77 MB STL opened for the first time now takes
+  0.6 s; a similar file took 3.4 s before.
+- **Binary PLY files load about five times faster** (vertices and triangles are read in parallel).
+- **Lychee scenes load faster**: their supports are built and model meshes read on all cores (a scene with 14
+  objects and 2,000 supports: 101 ms instead of 134 ms).
+- **Stepping through 7z and RAR archives**: in a solid archive (where every model has to be decoded through all
+  the files before it) the models met on the way, and up to eight after the one opened, are kept in memory
+  (512 MB at most) while you look. The next ones then open at once instead of decoding the archive from its
+  start again (six models of a solid 7z: about 5 ms each after the first). In a 7z whose files are packed one
+  by one, a model is now decoded on its own instead of after all the files before it.
+- At most two files are parsed at the same time. Opening a large folder no longer holds every file in memory at
+  once or makes a hard disk jump between them.
+- **Esc** closes the open window (Preferences as with *Cancel*, Information, About, Controls, Guide, Check for
+  updates) and only quits MeshPeek when no window is open.
+- Neighbouring files larger than 300 MB are no longer preloaded for the arrow keys.
+
+### Fixed
+- **Clear** while files were still loading: they no longer show up in the emptied scene afterwards. The same
+  applies to the old copies after a reload or a change of *Support detail* or the OBJ up axis.
+- Opening a folder or a model inside a 7z or RAR archive no longer freezes the window while the folder is searched
+  or the archive unpacked.
+- Folders are searched without following links to other folders (symbolic links, junctions), which could loop.
+- Binary STL files whose header gives the wrong triangle count (0, or extra bytes after the triangles) now load.
+- ASCII STL files with names or comments that are not UTF-8 (e.g. accented letters in a Windows code page) now
+  load. The *Comment* in the Information window only shows the `solid` line.
+- PLY colours stored as floating-point numbers (0 to 1) or 16-bit values are no longer shown as black. The
+  `diffuse_red/green/blue` names are recognised as well.
+- OBJ vertex colours written from 0 to 255 (instead of 0 to 1) are no longer all white.
+- The settings file is written to a temporary file first and then swapped in, so a crash or a full disk cannot
+  leave half a file. Opening a folder saves the recent files once instead of after every file.
+- The drive list in the Files tab is read once (until ⟳) instead of on every frame.
 
 ## 0.5.6 — 2026-10-15
 

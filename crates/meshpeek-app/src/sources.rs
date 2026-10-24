@@ -5,9 +5,12 @@
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use meshpeek_core::SUPPORTED_EXTENSIONS;
 use meshpeek_core::io::extension;
+
+use crate::unpacked::{self, Stream, Visit};
 
 /// Archive extensions whose models can be listed and opened.
 pub const ARCHIVE_EXTENSIONS: &[&str] = &["zip", "7z", "rar"];
@@ -30,15 +33,6 @@ pub enum Source {
         name: PathBuf,
         data: Vec<u8>,
     },
-}
-
-impl Source {
-    /// The file path, or the name inside the archive for unpacked members.
-    pub fn path(&self) -> &Path {
-        match self {
-            Self::Disk(path) | Self::Memory { name: path, .. } => path,
-        }
-    }
 }
 
 /// For a virtual path `<archive>/<entry>`: the archive file and the entry name inside it (with `/`).
@@ -86,15 +80,17 @@ fn models_in(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// Call `visit` for every file under `dir`, recursively.
+/// Call `visit` for every model file and archive under `dir`, recursively. Links to folders (symbolic links,
+/// junctions) are not followed: they can loop, or lead far outside the folder that was opened.
 fn walk(dir: &Path, visit: &mut impl FnMut(&Path)) {
     let Ok(read) = std::fs::read_dir(dir) else { return };
     for entry in read.flatten() {
         let path = entry.path();
-        if path.is_dir() {
+        let Ok(kind) = entry.file_type() else { continue }; // from the listing itself: no extra call per file
+        if kind.is_dir() {
             walk(&path, visit);
-        } else if is_model(&path) || is_archive(&path) {
-            visit(&path);
+        } else if (is_model(&path) || is_archive(&path)) && (kind.is_file() || path.is_file()) {
+            visit(&path); // a link to a file is fine
         }
     }
 }
@@ -133,9 +129,10 @@ pub fn list_models(archive: &Path) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
-/// The bytes of one entry of `archive`. In a solid 7z or a rar everything before the entry is decoded too.
+/// The bytes of one entry of `archive`. ZIP members, files of a 7z packed on their own and members of a non-solid
+/// RAR are read directly. In a solid 7z block or a solid RAR everything before the entry is decoded too, so those
+/// go through [`unpacked`], which keeps the models met on the way (and a few after) for the next reads.
 pub fn read_entry(archive: &Path, entry: &str) -> Result<Vec<u8>, String> {
-    let missing = || format!("{entry} not found in the archive");
     match extension(archive).as_str() {
         "zip" => {
             let file = std::fs::File::open(archive).map_err(|e| e.to_string())?;
@@ -145,35 +142,86 @@ pub fn read_entry(archive: &Path, entry: &str) -> Result<Vec<u8>, String> {
             file.read_to_end(&mut data).map_err(|e| e.to_string())?;
             Ok(data)
         }
-        "7z" => {
-            let mut reader = sevenz_rust2::ArchiveReader::open(archive, sevenz_rust2::Password::empty())
-                .map_err(|e| e.to_string())?;
-            let mut found = None;
-            reader
-                .for_each_entries(|item, content| {
-                    if normal(item.name()) == entry {
-                        let mut data = Vec::new();
-                        content.read_to_end(&mut data)?;
-                        found = Some(data);
-                        return Ok(false);
-                    }
-                    std::io::copy(content, &mut std::io::sink())?; // unread entries fail the checksum check
-                    Ok(true)
-                })
-                .map_err(|e| e.to_string())?;
-            found.ok_or_else(missing)
-        }
-        _ => {
-            let mut open = unrar::Archive::new(archive).open_for_processing().map_err(|e| e.to_string())?;
-            while let Some(header) = open.read_header().map_err(|e| e.to_string())? {
-                if normal(&header.entry().filename.to_string_lossy()) == entry {
-                    return header.read().map(|(data, _)| data).map_err(|e| e.to_string());
-                }
-                open = header.skip().map_err(|e| e.to_string())?;
-            }
-            Err(missing())
-        }
+        "7z" => read_7z(archive, entry),
+        _ => read_rar(archive, entry),
     }
+}
+
+/// An entry of a 7z archive.
+fn read_7z(archive: &Path, entry: &str) -> Result<Vec<u8>, String> {
+    let header = sevenz_rust2::Archive::open(archive).map_err(|e| e.to_string())?;
+    let index = header.files.iter().position(|f| normal(f.name()) == entry).ok_or_else(|| missing(entry))?;
+    let Some(block) = header.stream_map.file_block_index[index] else { return Ok(Vec::new()) }; // empty file
+    if header.stream_map.file_block_index.iter().filter(|b| **b == Some(block)).count() == 1 {
+        // packed on its own: decoded from where its block starts
+        let mut reader =
+            sevenz_rust2::ArchiveReader::open(archive, sevenz_rust2::Password::empty()).map_err(|e| e.to_string())?;
+        return reader.read_file(header.files[index].name()).map_err(|e| e.to_string());
+    }
+    let path = archive.to_path_buf();
+    let decode = move |visit: &mut Visit<'_>| {
+        let header = sevenz_rust2::Archive::open(&path).map_err(|e| e.to_string())?;
+        let mut file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+        let threads = std::thread::available_parallelism().map_or(1, |n| n.get() as u32);
+        let password = sevenz_rust2::Password::empty();
+        sevenz_rust2::BlockDecoder::new(threads, block, &header, &password, &mut file)
+            .for_each_entries(&mut |item, content| {
+                let name = normal(item.name());
+                let data = if is_model(Path::new(&name)) {
+                    let mut data = Vec::with_capacity(item.size as usize);
+                    content.read_to_end(&mut data)?;
+                    Some(data)
+                } else {
+                    std::io::copy(content, &mut std::io::sink())?; // unread files fail the checksum check
+                    None
+                };
+                Ok(visit(name, item.size, data))
+            })
+            .map(drop)
+            .map_err(|e| e.to_string())
+    };
+    unpacked::read(Stream::new(archive, block), entry, Arc::new(decode))
+}
+
+/// An entry of a RAR archive.
+fn read_rar(archive: &Path, entry: &str) -> Result<Vec<u8>, String> {
+    let mut open = unrar::Archive::new(archive).open_for_processing().map_err(|e| e.to_string())?;
+    if open.is_solid() {
+        let path = archive.to_path_buf();
+        let decode = move |visit: &mut Visit<'_>| {
+            let mut open = unrar::Archive::new(&path).open_for_processing().map_err(|e| e.to_string())?;
+            while let Some(header) = open.read_header().map_err(|e| e.to_string())? {
+                let file = header.entry();
+                let (name, size) = (normal(&file.filename.to_string_lossy()), file.unpacked_size);
+                let go_on = if file.is_file() && is_model(Path::new(&name)) {
+                    let (data, rest) = header.read().map_err(|e| e.to_string())?;
+                    open = rest;
+                    visit(name, size, Some(data))
+                } else {
+                    open = header.skip().map_err(|e| e.to_string())?; // decoded all the same in a solid archive
+                    visit(name, size, None)
+                };
+                if !go_on {
+                    break;
+                }
+            }
+            Ok(())
+        };
+        return unpacked::read(Stream::new(archive, 0), entry, Arc::new(decode));
+    }
+    // each member packed on its own: skipping one costs nothing
+    while let Some(header) = open.read_header().map_err(|e| e.to_string())? {
+        if normal(&header.entry().filename.to_string_lossy()) == entry {
+            return header.read().map(|(data, _)| data).map_err(|e| e.to_string());
+        }
+        open = header.skip().map_err(|e| e.to_string())?;
+    }
+    Err(missing(entry))
+}
+
+/// The message for an entry that is not in its archive.
+fn missing(entry: &str) -> String {
+    format!("{entry} not found in the archive")
 }
 
 #[cfg(test)]
@@ -216,5 +264,35 @@ mod tests {
         let mut problems = Vec::new();
         let found = expand([virtual_path.clone()], &mut problems);
         assert!(matches!(&found[..], [Source::Memory { name, data }] if *name == virtual_path && data == b"ply"));
+    }
+
+    #[test]
+    fn solid_and_separately_packed_7z_entries() {
+        let dir = std::env::temp_dir().join("meshpeek-sources-7z-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let files =
+            [("a.stl", b"first".to_vec()), ("doc/readme.txt", b"text".to_vec()), ("b/c.obj", b"second".to_vec())];
+        let entries = || files.iter().map(|(name, _)| sevenz_rust2::ArchiveEntry::new_file(name)).collect::<Vec<_>>();
+
+        let solid = dir.join("solid.7z");
+        let mut writer = sevenz_rust2::ArchiveWriter::create(&solid).unwrap();
+        let readers = files.iter().map(|(_, body)| std::io::Cursor::new(body.clone()).into()).collect();
+        writer.push_archive_entries(entries(), readers).unwrap();
+        writer.finish().unwrap();
+
+        let separate = dir.join("separate.7z");
+        let mut writer = sevenz_rust2::ArchiveWriter::create(&separate).unwrap();
+        for (entry, (_, body)) in entries().into_iter().zip(&files) {
+            writer.push_archive_entry(entry, Some(std::io::Cursor::new(body.clone()))).unwrap();
+        }
+        writer.finish().unwrap();
+
+        for archive in [&solid, &separate] {
+            assert_eq!(list_models(archive).unwrap(), ["a.stl", "b/c.obj"]);
+            assert_eq!(read_entry(archive, "b/c.obj").unwrap(), b"second");
+            assert_eq!(read_entry(archive, "a.stl").unwrap(), b"first");
+            assert!(read_entry(archive, "z.stl").unwrap_err().contains("not found"));
+        }
     }
 }

@@ -15,6 +15,7 @@ mod preferences;
 mod settings;
 mod sources;
 mod spacemouse;
+mod unpacked;
 mod updates;
 mod viewport;
 

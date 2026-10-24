@@ -38,6 +38,7 @@ pub const CONTROLS: &[(&str, &[(&str, &str)])] = &[
             ("Ctrl + W", "Clear the scene"),
             ("Ctrl + ,", "Preferences"),
             ("F1", "This controls overview"),
+            ("Esc", "Close the open window (Preferences: Cancel); with none open, quit"),
         ],
     ),
     (
@@ -155,9 +156,9 @@ pub const GUIDE: &[(&str, &[&str])] = &[
         "Preferences",
         &[
             "File > Preferences (Ctrl+,) is arranged in sections (Appearance, Navigation, Space mouse, \
-             System) listed on the left. It sets the material and colour of models and supports (previewed live), \
+             System) listed on the left. It sets how reflective models and supports are (a slider from matte to metal) and their colour (previewed live), \
              the support detail, whether OBJ files are Y-up (Blender, Maya and ZBrush export them that way), \
-             the theme (light, dark or the system's), the mouse orbit style, the build plate and printer volume, preloading for the \
+             the theme (light, dark or the system's) and the background colour of the 3D view, the mouse orbit style, the build plate and printer volume, preloading for the \
              arrow keys and the space mouse. Changing support detail or the OBJ axis reloads the open files.",
             "View > Colour each model (or Colour objects in the toolbar) gives every model its own colour, and \
              its name in the Objects panel takes the same colour. Models with colours of their own, from 3MF, PLY \

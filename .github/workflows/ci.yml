@@ -12,7 +12,7 @@ jobs:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true # sample models for the golden and render tests
       - uses: dtolnay/rust-toolchain@stable

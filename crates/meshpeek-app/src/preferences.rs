@@ -3,7 +3,7 @@
 
 use eframe::egui;
 
-use crate::settings::{MATERIALS, ORBIT_STYLES, SUPPORT_DETAIL, Settings, THEMES};
+use crate::settings::{ORBIT_STYLES, SUPPORT_DETAIL, Settings, THEMES};
 
 /// A page of the Preferences window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -86,9 +86,16 @@ fn page(ui: &mut egui::Ui, draft: &mut Settings, section: Section) {
             ui.label("Button bar:");
             ui.checkbox(&mut draft.toolbar_text, "Show text under the icons");
             ui.end_row();
+            ui.label("Background:");
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut draft.custom_background, "Own colour")
+                    .on_hover_text("Off: the theme's gradient. On: the 3D view is filled with the colour on the right.");
+                ui.add_enabled_ui(draft.custom_background, |ui| ui.color_edit_button_srgb(&mut draft.background_color));
+            });
+            ui.end_row();
             group(ui, "Models");
-            ui.label("Material:");
-            combo(ui, "model material", &mut draft.model_material, &material_names());
+            ui.label("Reflectiveness:");
+            reflectiveness(ui, &mut draft.model_reflectiveness);
             ui.end_row();
             ui.label("Colour:");
             ui.color_edit_button_srgb(&mut draft.model_color).on_hover_text("Used when the file has no colours");
@@ -98,8 +105,8 @@ fn page(ui: &mut egui::Ui, draft: &mut Settings, section: Section) {
                 .on_hover_text("Rotate OBJ files so their Y axis points up. Applied by reloading open files.");
             ui.end_row();
             group(ui, "Supports");
-            ui.label("Material:");
-            combo(ui, "support material", &mut draft.support_material, &material_names());
+            ui.label("Reflectiveness:");
+            reflectiveness(ui, &mut draft.support_reflectiveness);
             ui.end_row();
             ui.label("Colour:");
             ui.color_edit_button_srgb(&mut draft.support_color);
@@ -177,7 +184,10 @@ fn combo(ui: &mut egui::Ui, id: &str, value: &mut String, options: &[&str]) -> e
         .response
 }
 
-/// Names of the [`MATERIALS`].
-fn material_names() -> Vec<&'static str> {
-    MATERIALS.iter().map(|(n, _)| *n).collect()
+/// A continuous slider for a reflectiveness from 0 (matte) to 1 (metal), shown in percent.
+fn reflectiveness(ui: &mut egui::Ui, value: &mut f32) -> egui::Response {
+    let slider = egui::Slider::new(value, 0.0..=1.0)
+        .custom_formatter(|v, _| format!("{:.0} %", v * 100.0))
+        .custom_parser(|text| text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v| v / 100.0));
+    ui.add(slider).on_hover_text("From matte (0 %) through plastic and gloss to metal (100 %)")
 }

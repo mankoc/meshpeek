@@ -14,18 +14,13 @@ use crate::browser::{self, Browser};
 use crate::help;
 use crate::loading::{self, LoadResult};
 use crate::preferences;
-use crate::settings::{MATERIALS, Settings, material, rgb};
+use crate::settings::{Settings, material, rgb};
 use crate::sources;
 use crate::spacemouse::{self, Motion};
 use crate::updates::Updates;
 use crate::viewport::{View, Viewport};
 
-/// License of MeshPeek itself.
-const LICENSE_NAME: &str = "CC BY-NC-SA 4.0";
-/// Where the licence text is published.
-const LICENSE_URL: &str = "https://creativecommons.org/licenses/by-nc-sa/4.0/";
-/// Notices of the open-source libraries built into MeshPeek; shipped next to the executable.
-const THIRD_PARTY_FILE: &str = "THIRD-PARTY-LICENSES.html";
+mod windows;
 
 /// One row of the objects tree.
 struct Entry {
@@ -45,7 +40,7 @@ struct Entry {
     info: Vec<(String, String)>,
 }
 
-/// Colours handed out to the models in turn by "Colour each model".
+/// Colours handed out to the models in turn by "Colour objects".
 const MODEL_COLORS: [[u8; 3]; 8] = [
     [0x4e, 0x9a, 0xe6],
     [0xe6, 0x6a, 0x4e],
@@ -124,12 +119,15 @@ pub struct MeshPeekApp {
     skipped: Vec<String>,
     /// Files in the scene, in the order they were opened (for Reload).
     loaded_paths: Vec<PathBuf>,
-    /// Loads still running.
+    /// Loads still running (one per opened path: a folder counts once until its last file arrives).
     pending: usize,
     /// Files were opened into an empty scene: keep framing until all of them have arrived.
     fit_until_loaded: bool,
-    /// Loader threads send their results here.
+    /// Loader threads send their results here. Replaced on Clear, so loads still running for the old scene
+    /// send into the void.
     results: (Sender<LoadResult>, Receiver<LoadResult>),
+    /// A file was added to the recent files since the settings were last saved.
+    recent_unsaved: bool,
     /// The previous and next file of the folder (or archive), loaded in the background once the scene has
     /// finished loading, so the arrow keys show them at once.
     preloaded: HashMap<PathBuf, Preload>,
@@ -165,6 +163,14 @@ pub struct MeshPeekApp {
     snapshot: Option<(PathBuf, u32)>,
 }
 
+/// The colour "Colour objects" gives the model with this `ordinal` (its position among the models).
+fn model_colour(ordinal: usize) -> [u8; 3] {
+    MODEL_COLORS[ordinal % MODEL_COLORS.len()]
+}
+
+/// Neighbouring files larger than this are not preloaded.
+const PRELOAD_MAX_BYTES: u64 = 300 << 20;
+
 /// Extra indent of a model's supports under it in the objects tree.
 const CHILD_INDENT: f32 = 16.0;
 
@@ -196,6 +202,7 @@ impl MeshPeekApp {
             pending: 0,
             fit_until_loaded: false,
             results: channel(),
+            recent_unsaved: false,
             preloaded: HashMap::new(),
             preload_results: channel(),
             preloaded_for: None,
@@ -252,16 +259,12 @@ impl MeshPeekApp {
             self.fit_until_loaded = true;
         }
         let paths: Vec<PathBuf> = paths.into_iter().filter(|path| !self.take_preloaded(path)).collect();
-        let mut problems = Vec::new();
-        let paths = sources::expand(paths, &mut problems);
-        if let Some(problem) = problems.first() {
-            self.status = format!("Could not open {problem}");
-        }
-        for source in paths {
-            self.status = format!("Loading {}…", file_name(source.path()));
+        // folders are searched and archive members unpacked on the loader thread, not here
+        for path in paths {
+            self.status = format!("Loading {}…", file_name(&path));
             self.pending += 1;
             let device = self.render_state.device.clone();
-            loading::spawn(source, self.settings.load_options(), device, self.results.0.clone(), ctx.clone());
+            loading::spawn(path, self.settings.load_options(), device, self.results.0.clone(), ctx.clone());
         }
     }
 
@@ -324,20 +327,25 @@ impl MeshPeekApp {
         wanted.dedup();
         wanted.retain(|p| *p != current);
         self.preloaded.retain(|path, _| wanted.contains(path));
+        // a huge neighbour would hold a lot of GPU memory for a file that may never be shown
+        let small = |path: &Path| std::fs::metadata(path).is_ok_and(|m| m.len() <= PRELOAD_MAX_BYTES);
         for path in wanted {
-            if !self.preloaded.contains_key(&path) {
+            let in_archive = sources::archive_of(&path).is_some(); // members are only read when loaded
+            if !self.preloaded.contains_key(&path) && (in_archive || small(&path)) {
                 self.preloaded.insert(path.clone(), Preload::Loading { wanted: false });
                 let device = self.render_state.device.clone();
                 let done = self.preload_results.0.clone();
-                loading::spawn_path(path, self.settings.load_options(), device, done, ctx.clone());
+                loading::spawn(path, self.settings.load_options(), device, done, ctx.clone());
             }
         }
     }
 
     /// Add the files whose loading finished to the scene and the objects tree.
     fn receive_loads(&mut self) {
-        while let Ok(LoadResult { path, result, seconds, .. }) = self.results.1.try_recv() {
-            self.pending -= 1;
+        while let Ok(LoadResult { path, result, seconds, last, .. }) = self.results.1.try_recv() {
+            if last {
+                self.pending -= 1;
+            }
             let file = match result {
                 Ok(file) => file,
                 Err(e) => {
@@ -386,7 +394,7 @@ impl MeshPeekApp {
             }
             if path.exists() {
                 self.settings.add_recent(&path); // not files read from inside an archive
-                self.settings.save();
+                self.recent_unsaved = true;
             }
             if self.fit_until_loaded {
                 if first {
@@ -397,6 +405,9 @@ impl MeshPeekApp {
         }
         if self.pending == 0 {
             self.fit_until_loaded = false;
+            if std::mem::take(&mut self.recent_unsaved) {
+                self.settings.save(); // once all files are in, not once per file of a folder
+            }
         }
     }
 
@@ -408,15 +419,25 @@ impl MeshPeekApp {
         self.info_for = None;
         self.skipped.clear();
         self.loaded_paths.clear();
+        // loads still running were for the old scene: their results now go to the dropped receiver
+        if self.pending > 0 {
+            self.status = "Loading cancelled".into();
+        }
+        self.results = channel();
+        self.pending = 0;
+        self.fit_until_loaded = false;
+        for preload in self.preloaded.values_mut() {
+            if let Preload::Loading { wanted } = preload {
+                *wanted = false; // keep it as a preload, do not put it into the new scene
+            }
+        }
     }
 
     /// Load every file of the scene again (after a change of load options, or on request).
     fn reload(&mut self, ctx: &egui::Context) {
         let paths = self.loaded_paths.clone();
         self.clear();
-        // they were loaded with the old options; one the user is waiting for is opened again below
-        self.pending -= self.preloaded.values().filter(|p| matches!(p, Preload::Loading { wanted: true })).count();
-        self.preloaded.clear();
+        self.preloaded.clear(); // they may have been loaded with the old options
         self.preloaded_for = None;
         self.open_files(ctx, paths);
     }
@@ -448,7 +469,7 @@ impl MeshPeekApp {
                 .flatten()
                 .flatten()
                 .map(|e| e.path())
-                .filter(|p| p.is_file() && sources::is_model(p))
+                .filter(|p| sources::is_model(p) && p.is_file())
                 .collect();
             files.sort_by_key(|p| key(p));
             files
@@ -510,17 +531,17 @@ impl MeshPeekApp {
 
     /// Style for an object; `ordinal` is its position among the models (picks its colour when colouring each).
     fn style(&self, kind: ObjectKind, ordinal: usize, settings: &Settings) -> Style {
-        let (mut color, name) = match kind {
-            ObjectKind::Support => (settings.support_color, &settings.support_material),
-            ObjectKind::Model => (settings.model_color, &settings.model_material),
+        let (mut color, reflectiveness) = match kind {
+            ObjectKind::Support => (settings.support_color, settings.support_reflectiveness),
+            ObjectKind::Model => (settings.model_color, settings.model_reflectiveness),
         };
         if self.color_models && kind == ObjectKind::Model {
-            color = MODEL_COLORS[ordinal % MODEL_COLORS.len()];
+            color = model_colour(ordinal);
         }
-        Style { color: rgb(color), material: material(name).unwrap_or(MATERIALS[1].1) }
+        Style { color: rgb(color), material: material(reflectiveness) }
     }
 
-    /// Give every object the colour and material `settings` (or "Colour each model") call for.
+    /// Give every object the colour and material `settings` (or "Colour objects") call for.
     fn apply_styles(&mut self, settings: &Settings) {
         let mut models = 0;
         for entry in &self.entries {
@@ -550,8 +571,8 @@ impl MeshPeekApp {
             return; // typing in a text field
         }
         let pressed = |key| ctx.input(|i| i.key_pressed(key) && i.modifiers.is_none());
-        if pressed(Key::Escape) {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        if pressed(Key::Escape) && !egui::Popup::is_any_open(ctx) && !self.close_window() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close); // nothing open: Esc quits
         }
         if pressed(Key::F) {
             self.viewport.fit_all();
@@ -582,6 +603,23 @@ impl MeshPeekApp {
         if !supported.is_empty() {
             self.open_files(ctx, supported);
         }
+    }
+
+    /// Close one open window (Preferences as with Cancel); `false` if none was open.
+    fn close_window(&mut self) -> bool {
+        if self.draft.take().is_some() {
+            self.apply_styles(&self.settings.clone()); // undo the live preview
+            return true;
+        }
+        if self.updates.is_open() {
+            self.updates.close();
+            return true;
+        }
+        // the first one open is closed (`||` stops there)
+        self.info_for.take().is_some()
+            || std::mem::take(&mut self.show_about)
+            || std::mem::take(&mut self.show_guide)
+            || std::mem::take(&mut self.show_controls)
     }
 
     /// Switch wireframe drawing (stays off without adapter support).
@@ -702,13 +740,9 @@ impl MeshPeekApp {
     fn arrange(&mut self) {
         let renderer = &self.viewport.renderer;
         // one group per model: the model and the objects that belong to it (its supports)
-        let groups: Vec<Vec<usize>> = (0..self.entries.len())
-            .filter(|&i| self.entries[i].parent.is_none())
-            .map(|i| {
-                std::iter::once(i)
-                    .chain((0..self.entries.len()).filter(|&j| self.entries[j].parent == Some(i)))
-                    .collect()
-            })
+        let groups: Vec<Vec<usize>> = (self.children().into_iter().enumerate())
+            .filter(|(i, _)| self.entries[*i].parent.is_none())
+            .map(|(i, children)| std::iter::once(i).chain(children).collect())
             .collect();
         let mut boxes = Vec::new();
         let mut movable = Vec::new();
@@ -743,7 +777,7 @@ impl MeshPeekApp {
         }
     }
 
-    /// Switch "Colour each model".
+    /// Switch "Colour objects".
     fn set_color_models(&mut self, on: bool) {
         self.color_models = on;
         self.apply_styles(&self.settings.clone());
@@ -795,7 +829,7 @@ impl MeshPeekApp {
         }
     }
 
-    /// The colour of each entry's name in the Objects tab: with "Colour each model", a model's own colour (models
+    /// The colour of each entry's name in the Objects tab: with "Colour objects", a model's own colour (models
     /// whose mesh has colours of its own keep the text colour, as do supports).
     fn name_colours(&self) -> Vec<Option<Color32>> {
         let mut models = 0;
@@ -803,24 +837,33 @@ impl MeshPeekApp {
             .iter()
             .map(|entry| {
                 let model = entry.kind == ObjectKind::Model;
-                let colour = MODEL_COLORS[models % MODEL_COLORS.len()];
+                let [r, g, b] = model_colour(models);
                 models += model as usize;
-                (self.color_models && model && !entry.own_colours)
-                    .then(|| Color32::from_rgb(colour[0], colour[1], colour[2]))
+                (self.color_models && model && !entry.own_colours).then(|| Color32::from_rgb(r, g, b))
             })
             .collect()
+    }
+
+    /// For each entry, the entries that belong to it (a model's supports), in order.
+    fn children(&self) -> Vec<Vec<usize>> {
+        let mut children = vec![Vec::new(); self.entries.len()];
+        for (index, entry) in self.entries.iter().enumerate() {
+            if let Some(parent) = entry.parent {
+                children[parent].push(index);
+            }
+        }
+        children
     }
 
     /// The Objects tab: models with their supports, with visibility, centre and info buttons.
     fn objects_panel(&mut self, ui: &mut egui::Ui) {
         let colours = self.name_colours();
+        let all_children = self.children(); // once, not a search of all entries per model
         egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-            for index in 0..self.entries.len() {
+            for (index, children) in all_children.iter().enumerate() {
                 if self.entries[index].parent.is_some() {
                     continue;
                 }
-                let children: Vec<usize> =
-                    (0..self.entries.len()).filter(|&c| self.entries[c].parent == Some(index)).collect();
                 if children.is_empty() {
                     self.object_row(ui, index, 0.0, colours[index]);
                 } else {
@@ -893,141 +936,6 @@ impl MeshPeekApp {
             }
         });
     }
-
-    /// The Preferences window: edits a draft that is previewed live and kept on OK.
-    fn preferences_window(&mut self, ctx: &egui::Context) {
-        let Some(mut draft) = self.draft.take() else { return };
-        let mut decision = None; // Some(true) = OK, Some(false) = Cancel
-        let mut open = true;
-        let section = &mut self.preferences_section;
-        egui::Window::new("Preferences")
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-            .open(&mut open)
-            .show(ctx, |ui| {
-                preferences::show(ui, &mut draft, section);
-                ui.separator();
-                let row = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
-                ui.allocate_ui_with_layout(row, egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Cancel").clicked() {
-                        decision = Some(false);
-                    }
-                    if ui.button("OK").clicked() {
-                        decision = Some(true);
-                    }
-                });
-            });
-        if !open {
-            decision = Some(false);
-        }
-        match decision {
-            None => {
-                self.apply_styles(&draft); // live preview
-                self.draft = Some(draft);
-            }
-            Some(false) => self.apply_styles(&self.settings.clone()),
-            Some(true) => {
-                let reload = draft.load_options() != self.settings.load_options();
-                self.apply_styles(&draft);
-                self.settings = draft;
-                self.settings.save();
-                if reload && !self.loaded_paths.is_empty() {
-                    self.reload(ctx);
-                }
-            }
-        }
-    }
-
-    /// Facts about one object and its file.
-    fn info_window(&mut self, ctx: &egui::Context) {
-        let Some(index) = self.info_for else { return };
-        let Some(entry) = self.entries.get(index) else {
-            self.info_for = None;
-            return;
-        };
-        let supports: usize = self.entries.iter().filter(|e| e.parent == Some(index)).map(|e| e.triangles).sum();
-        let size = self.viewport.renderer.object_bounds(entry.id).map(|(lo, hi)| hi - lo);
-        let mut open = true;
-        egui::Window::new(format!("Information: {}", entry.name)).collapsible(false).open(&mut open).show(ctx, |ui| {
-            egui::Grid::new("model info").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-                ui.label("Path:");
-                ui.label(entry.source.display().to_string());
-                ui.end_row();
-                ui.label("Triangles:");
-                ui.label(thousands(entry.triangles));
-                ui.end_row();
-                if supports > 0 {
-                    ui.label("Support triangles:");
-                    ui.label(thousands(supports));
-                    ui.end_row();
-                }
-                if let Some(s) = size {
-                    ui.label("Width (X):");
-                    ui.label(format!("{:.2} mm", s.x));
-                    ui.end_row();
-                    ui.label("Depth (Y):");
-                    ui.label(format!("{:.2} mm", s.y));
-                    ui.end_row();
-                    ui.label("Height (Z):");
-                    ui.label(format!("{:.2} mm", s.z));
-                    ui.end_row();
-                }
-                for (label, value) in &entry.info {
-                    ui.label(format!("{label}:"));
-                    ui.label(value);
-                    ui.end_row();
-                }
-            });
-        });
-        if !open {
-            self.info_for = None;
-        }
-    }
-
-    /// Version, author, licences, GPU and space mouse.
-    fn about_window(&mut self, ctx: &egui::Context) {
-        egui::Window::new("About MeshPeek").collapsible(false).resizable(false).open(&mut self.show_about).show(
-            ctx,
-            |ui| {
-                ui.horizontal(|ui| {
-                    ui.add(egui::Image::new(&self.tool_icons.app).fit_to_exact_size(egui::vec2(128.0, 128.0)));
-                    ui.vertical(|ui| {
-                        ui.heading(format!("MeshPeek {}", env!("CARGO_PKG_VERSION")));
-                        ui.label("Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox, .ctp and .ctb files.");
-                        ui.label(
-                            "Lychee and CHITUBOX scenes are shown with their supports, 3MF files with their colours, CTB print files as the solid their layers print.",
-                        );
-                        ui.label("by MrIxolite");
-                        // the project page, from the workspace's `repository` field
-                        let repository = env!("CARGO_PKG_REPOSITORY");
-                        ui.hyperlink_to(repository.trim_start_matches("https://"), repository)
-                            .on_hover_text("Source code, releases and issues on GitHub");
-                    });
-                });
-                ui.separator();
-                ui.label(format!("Rendering with: {}", self.adapter));
-                ui.label(format!("Memory in use: {:.0} MB", memory_mb()));
-                ui.label(format!("Space mouse: {}", self.space_device.as_deref().unwrap_or("none detected")));
-                ui.separator();
-                ui.horizontal(|ui| {
-                    ui.label("License:");
-                    ui.hyperlink_to(LICENSE_NAME, LICENSE_URL);
-                });
-                match third_party_file() {
-                    Some(path) => {
-                        if ui.link("Third-party licenses").clicked() {
-                            let url = format!("file:///{}", path.display().to_string().replace('\\', "/"));
-                            ui.ctx().open_url(egui::OpenUrl::new_tab(url));
-                        }
-                    }
-                    None => {
-                        ui.weak(format!("Third-party licenses: {THIRD_PARTY_FILE} (included with the installed app)"));
-                    }
-                }
-            },
-        );
-    }
 }
 
 impl eframe::App for MeshPeekApp {
@@ -1095,7 +1003,12 @@ impl MeshPeekApp {
         if ctx.options(|o| o.theme_preference) != preference {
             ctx.set_theme(preference);
         }
-        let palette = if ctx.theme() == egui::Theme::Light { Palette::LIGHT } else { Palette::DARK };
+        let mut palette = if ctx.theme() == egui::Theme::Light { Palette::LIGHT } else { Palette::DARK };
+        if settings.custom_background {
+            // the chosen colour, plain: what you pick is what the view shows (e.g. white for screenshots)
+            palette.background_top = rgb(settings.background_color);
+            palette.background_bottom = palette.background_top;
+        }
         self.viewport.renderer.set_palette(palette);
     }
 
@@ -1301,14 +1214,6 @@ pub(crate) fn open_default_apps_settings() {
     if let Err(e) = std::process::Command::new("explorer.exe").arg("ms-settings:defaultapps").spawn() {
         log::warn!("could not open the Default apps settings: {e}");
     }
-}
-
-/// The third-party notices file next to the executable (zip, MSI) or in /usr/share/doc (Linux package).
-fn third_party_file() -> Option<PathBuf> {
-    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
-    [exe_dir.join(THIRD_PARTY_FILE), PathBuf::from("/usr/share/doc/meshpeek").join(THIRD_PARTY_FILE)]
-        .into_iter()
-        .find(|p| p.exists())
 }
 
 /// Physical memory used by the process, in MiB.

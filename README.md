@@ -39,7 +39,8 @@ meshpeek [--cpu] [files...]
 | Wireframe | | W |
 | Centre on a model | Crosshair icon next to it in the Objects panel (click again, or F, to stop) | |
 | Help | | F1 (Help → Controls); Help → User guide |
-| Preferences | | Ctrl+, (materials and colours, support detail, OBJ up axis, space mouse) |
+| Close a window / quit | | Esc (closes the open window; with none open, quits) |
+| Preferences | | Ctrl+, (reflectiveness and colours, background colour, support detail, OBJ up axis, space mouse) |
 
 View → Theme switches between System, Light and Dark.
 

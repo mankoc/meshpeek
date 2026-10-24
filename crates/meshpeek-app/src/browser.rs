@@ -44,6 +44,8 @@ pub struct Browser {
     listings: HashMap<PathBuf, Result<Vec<Item>, String>>,
     /// Model entries of archives (paths inside, with `/`), keyed by archive.
     archives: HashMap<PathBuf, Result<Vec<String>, String>>,
+    /// The drives, found once (until Refresh): probing every letter can wait on slow or disconnected drives.
+    drives: Option<Vec<Item>>,
     /// Selected model files.
     selected: BTreeSet<PathBuf>,
     /// The file a Shift+click range starts from.
@@ -71,6 +73,7 @@ impl Browser {
     pub fn refresh(&mut self) {
         self.listings.clear();
         self.archives.clear();
+        self.drives = None;
     }
 
     /// The model entries of `archive` (paths inside it, with `/`, sorted), read once.
@@ -165,7 +168,7 @@ impl Browser {
 
         let items = match self.root.clone() {
             Some(root) => self.children(&root),
-            None => Ok(drives()),
+            None => Ok(self.drives.get_or_insert_with(drives).clone()),
         };
         let mut order = Vec::new();
         egui::ScrollArea::both().auto_shrink(false).show(ui, |ui| match items {
@@ -271,7 +274,9 @@ fn read_folder(dir: &Path) -> Result<Vec<Item>, String> {
         })
         .filter_map(|entry| {
             let path = entry.path();
-            let kind = if path.is_dir() {
+            // the type comes with the listing; only links need a look at what they point to
+            let is_dir = entry.file_type().is_ok_and(|t| t.is_dir() || (t.is_symlink() && path.is_dir()));
+            let kind = if is_dir {
                 Kind::Folder
             } else if sources::is_archive(&path) {
                 Kind::Archive

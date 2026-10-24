@@ -6,13 +6,17 @@ use meshpeek_core::LoadOptions;
 use meshpeek_render::Material;
 use serde::{Deserialize, Serialize};
 
-/// Material presets (same values as the Python version).
-pub const MATERIALS: [(&str, Material); 4] = [
+/// The materials along the reflectiveness scale, evenly spaced from 0 to 1 (the presets of earlier versions, with
+/// the values of the Python version): matte, plastic, glossy, metal. Values in between are blended.
+const MATERIAL_SCALE: [(&str, Material); 4] = [
     ("Matte", Material { ambient: 0.15, diffuse: 0.9, specular: 0.0, specular_power: 1.0 }),
     ("Plastic", Material { ambient: 0.1, diffuse: 0.8, specular: 0.3, specular_power: 20.0 }),
     ("Glossy", Material { ambient: 0.1, diffuse: 0.7, specular: 1.0, specular_power: 10.0 }),
     ("Metal", Material { ambient: 0.3, diffuse: 0.45, specular: 1.0, specular_power: 12.0 }),
 ];
+
+/// Default reflectiveness of models and supports: plastic.
+const PLASTIC: f32 = 1.0 / 3.0;
 
 /// Facets around `.lys` support columns and their joint spheres.
 pub const SUPPORT_DETAIL: [(&str, u32); 4] = [("Low", 6), ("Medium", 12), ("High", 24), ("Very high", 48)];
@@ -48,12 +52,12 @@ impl Default for SpaceMouseSettings {
 #[serde(default)]
 /// Preferences, saved as TOML in the user's configuration folder.
 pub struct Settings {
-    /// Name of a [`MATERIALS`] entry for models.
-    pub model_material: String,
+    /// How reflective models are, from 0 (matte) to 1 (metal); see [`material`].
+    pub model_reflectiveness: f32,
     /// Used when the file has no colours of its own.
     pub model_color: [u8; 3],
-    /// Name of a [`MATERIALS`] entry for supports.
-    pub support_material: String,
+    /// How reflective supports are, from 0 (matte) to 1 (metal).
+    pub support_reflectiveness: f32,
     /// Colour of supports and rafts.
     pub support_color: [u8; 3],
     /// Facets round support columns (a name in [`SUPPORT_DETAIL`]).
@@ -62,6 +66,10 @@ pub struct Settings {
     pub obj_y_up: bool,
     /// UI theme: one of [`THEMES`].
     pub theme: String,
+    /// Fill the 3D view's background with [`Settings::background_color`] instead of the theme's gradient.
+    pub custom_background: bool,
+    /// The background colour used with `custom_background` (kept while it is off).
+    pub background_color: [u8; 3],
     /// Draw the build plate of `.lys` files.
     pub show_plate: bool,
     /// Draw the printer's build volume (the box above the plate) of `.lys` files.
@@ -81,13 +89,15 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            model_material: "Plastic".into(),
+            model_reflectiveness: PLASTIC,
             model_color: [0xc3, 0xcc, 0xd9],
-            support_material: "Plastic".into(),
+            support_reflectiveness: PLASTIC,
             support_color: [0xe8, 0xa2, 0x4a],
             support_detail: "Medium".into(),
             obj_y_up: true,
             theme: "System".into(),
+            custom_background: false,
+            background_color: [0x30, 0x33, 0x38],
             show_plate: true,
             show_volume: true,
             toolbar_text: true,
@@ -119,11 +129,24 @@ impl Settings {
     pub fn from_toml(text: &str) -> Self {
         let mut settings: Self = toml::from_str(text).unwrap_or_default();
         let defaults = Self::default();
-        if material(&settings.model_material).is_none() {
-            settings.model_material = defaults.model_material.clone();
+        // earlier versions saved a material preset by name: start the slider where that preset sits
+        let saved: toml::Table = text.parse().unwrap_or_default();
+        let preset = |key: &str| {
+            let name = saved.get(key)?.as_str()?;
+            let at = MATERIAL_SCALE.iter().position(|(n, _)| *n == name)?;
+            Some(at as f32 / (MATERIAL_SCALE.len() - 1) as f32)
+        };
+        if !saved.contains_key("model_reflectiveness") {
+            settings.model_reflectiveness = preset("model_material").unwrap_or(defaults.model_reflectiveness);
         }
-        if material(&settings.support_material).is_none() {
-            settings.support_material = defaults.support_material.clone();
+        if !saved.contains_key("support_reflectiveness") {
+            settings.support_reflectiveness = preset("support_material").unwrap_or(defaults.support_reflectiveness);
+        }
+        for (value, default) in [
+            (&mut settings.model_reflectiveness, defaults.model_reflectiveness),
+            (&mut settings.support_reflectiveness, defaults.support_reflectiveness),
+        ] {
+            *value = if value.is_finite() { value.clamp(0.0, 1.0) } else { default };
         }
         if !THEMES.contains(&settings.theme.as_str()) {
             settings.theme = defaults.theme.clone();
@@ -145,7 +168,11 @@ impl Settings {
         if let Some(dir) = file.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        if let Err(e) = std::fs::write(&file, toml::to_string_pretty(self).unwrap_or_default()) {
+        // written next to it, then swapped in: a crash or full disk mid-write cannot leave half a file
+        let partial = file.with_extension("toml.partial");
+        let saved = std::fs::write(&partial, toml::to_string_pretty(self).unwrap_or_default())
+            .and_then(|()| std::fs::rename(&partial, &file));
+        if let Err(e) = saved {
             log::warn!("could not save settings to {}: {e}", file.display());
         }
     }
@@ -166,9 +193,21 @@ impl Settings {
     }
 }
 
-/// The material called `name` in [`MATERIALS`].
-pub fn material(name: &str) -> Option<Material> {
-    MATERIALS.iter().find(|(n, _)| *n == name).map(|(_, m)| *m)
+/// The material of `reflectiveness` (0 matte, 1 metal): blended between the two neighbouring materials of the
+/// scale, so the look changes smoothly as the slider moves.
+pub fn material(reflectiveness: f32) -> Material {
+    let last = (MATERIAL_SCALE.len() - 1) as f32;
+    let at = if reflectiveness.is_finite() { reflectiveness.clamp(0.0, 1.0) * last } else { PLASTIC * last };
+    let below = (at.floor() as usize).min(MATERIAL_SCALE.len() - 2);
+    let t = at - below as f32;
+    let (a, b) = (MATERIAL_SCALE[below].1, MATERIAL_SCALE[below + 1].1);
+    let mix = |x: f32, y: f32| x + (y - x) * t;
+    Material {
+        ambient: mix(a.ambient, b.ambient),
+        diffuse: mix(a.diffuse, b.diffuse),
+        specular: mix(a.specular, b.specular),
+        specular_power: mix(a.specular_power, b.specular_power),
+    }
 }
 
 /// An 8-bit colour as 0..1 floats.
@@ -187,19 +226,47 @@ mod tests {
 
     #[test]
     fn roundtrip_and_validation() {
-        let settings = Settings { model_material: "Metal".into(), model_color: [1, 2, 3], ..Settings::default() };
+        let settings = Settings {
+            model_reflectiveness: 0.8,
+            model_color: [1, 2, 3],
+            custom_background: true,
+            background_color: [255, 255, 255],
+            ..Settings::default()
+        };
         let text = toml::to_string(&settings).unwrap();
         assert_eq!(Settings::from_toml(&text), settings);
         let invalid = Settings::from_toml(
-            "support_material = \"Chrome\"\nsupport_detail = \"Ultra\"\ntheme = \"Neon\"\nmouse_orbit = \"Spin\"\n",
+            "support_reflectiveness = 7.0\nsupport_detail = \"Ultra\"\ntheme = \"Neon\"\nmouse_orbit = \"Spin\"\n",
         );
-        assert_eq!(invalid.support_material, "Plastic");
+        assert_eq!(invalid.support_reflectiveness, 1.0); // clamped
         assert_eq!(invalid.support_detail, "Medium");
         assert_eq!(invalid.theme, "System");
         assert_eq!(invalid.mouse_orbit, "Turntable");
         let spacemouse = Settings::from_toml("[space_mouse]\nsensitivity = 50.0\ninvert_zoom = true\n");
         assert_eq!(spacemouse.space_mouse.sensitivity, 5.0); // clamped
         assert!(spacemouse.space_mouse.invert_zoom && spacemouse.space_mouse.enabled);
+    }
+
+    #[test]
+    fn material_presets_of_earlier_versions_become_reflectiveness() {
+        let old = Settings::from_toml("model_material = \"Metal\"\nsupport_material = \"Matte\"\n");
+        assert_eq!((old.model_reflectiveness, old.support_reflectiveness), (1.0, 0.0));
+        let unknown = Settings::from_toml("model_material = \"Chrome\"\n");
+        assert_eq!(unknown.model_reflectiveness, PLASTIC);
+        // a reflectiveness saved by this version wins over an old preset name
+        let both = Settings::from_toml("model_material = \"Metal\"\nmodel_reflectiveness = 0.25\n");
+        assert_eq!(both.model_reflectiveness, 0.25);
+    }
+
+    #[test]
+    fn the_scale_passes_through_the_presets_and_blends_between_them() {
+        for (i, (_, preset)) in MATERIAL_SCALE.iter().enumerate() {
+            assert_eq!(material(i as f32 / 3.0), *preset);
+        }
+        let half = material(1.0 / 6.0); // halfway from matte to plastic
+        assert!((half.specular - 0.15).abs() < 1e-6 && (half.diffuse - 0.85).abs() < 1e-6);
+        assert_eq!(material(f32::NAN), material(PLASTIC));
+        assert_eq!(material(-1.0), MATERIAL_SCALE[0].1);
     }
 
     #[test]

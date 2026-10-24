@@ -57,6 +57,16 @@ impl Updates {
         });
     }
 
+    /// The window is shown.
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
+    /// Close the window (a running check goes on).
+    pub fn close(&mut self) {
+        self.open = false;
+    }
+
     /// The update window, while it is open.
     pub fn window(&mut self, ctx: &egui::Context) {
         let status = self.status.lock().unwrap().clone();

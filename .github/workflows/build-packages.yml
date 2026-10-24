@@ -20,13 +20,13 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build zip and MSI
         shell: pwsh
         run: ./scripts/build.ps1 -InstallTools -SkipTests
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: meshpeek-windows
           path: dist/*
@@ -35,12 +35,12 @@ jobs:
   linux:
     runs-on: ubuntu-22.04 # older glibc: the packages also run on older distributions
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build tar.gz and .deb
         run: ./scripts/build.sh --install-tools --skip-tests
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: meshpeek-linux
           path: dist/*
@@ -53,15 +53,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Read version
         id: version
         run: echo "version=$(sed -n 's/^version *= *\"\([^\"]*\)\".*/\1/p' Cargo.toml | head -n1)" >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: MeshPeek ${{ steps.version.outputs.version }}
