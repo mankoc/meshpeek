@@ -66,7 +66,7 @@ pub const GUIDE: &[(&str, &[&str])] = &[
         "Opening files",
         &[
             "MeshPeek opens STL (binary and ASCII), OBJ, PLY, 3MF, Lychee Slicer .lys, CHITUBOX .chitubox projects \
-             (.chitubox and .ctp), CHITUBOX .ctb print files and .ags support projects. \
+             (.chitubox and .ctp), CHITUBOX .ctb print files and RuneBrace .ags projects. \
              Use File > Open (Ctrl+O), File > Open Recent, drag files onto the window, or pass them on the \
              command line.",
             "Several files can be open at once; they keep their own coordinates, so parts exported from one \

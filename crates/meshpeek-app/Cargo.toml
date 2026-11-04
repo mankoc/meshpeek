@@ -1,6 +1,6 @@
 [package]
 name = "meshpeek-app"
-description = "Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox, .ctp and .ctb, and .ags support files"
+description = "Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox, .ctp and .ctb, and RuneBrace .ags files"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -41,7 +41,7 @@ name = "meshpeek"
 maintainer = "MeshPeek contributors"
 copyright = "MeshPeek contributors"
 extended-description = """\
-Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox, .ctp and .ctb, and .ags support files. Renders on the GPU, or on the CPU when no GPU \
+Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox, .ctp and .ctb, and RuneBrace .ags files. Renders on the GPU, or on the CPU when no GPU \
 is available (Mesa lavapipe)."""
 depends = "$auto, mesa-vulkan-drivers"
 section = "graphics"

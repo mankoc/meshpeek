@@ -2,6 +2,19 @@
 
 All notable changes to MeshPeek, newest first.
 
+## Unreleased
+
+### Added
+- **Bracing in RuneBrace `.ags` projects**: the Xs between the supports, worked out from the project's bracing
+  settings (RuneBrace does not store the braces themselves, so they match in pattern, not one by one). They are an
+  object of their own under the model, so they can be hidden.
+
+### Changed
+- **RuneBrace `.ags` projects** look closer to RuneBrace: the raft is now round pads joined by bridges that
+  triangulate the feet, with RuneBrace's network settings (also in projects with snapping to the grid off, which had
+  no bridges at all), and the foot cones
+  are as high as the project says instead of running along the whole last stretch of a support.
+
 ## 0.5.8 — 2026-11-04
 
 MeshPeek now supports `.ags` files. This release also includes the changes of 0.5.7, which had no release of its

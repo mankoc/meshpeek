@@ -115,7 +115,7 @@ impl MeshPeekApp {
                     ui.add(egui::Image::new(&self.tool_icons.app).fit_to_exact_size(egui::vec2(128.0, 128.0)));
                     ui.vertical(|ui| {
                         ui.heading(format!("MeshPeek {}", env!("CARGO_PKG_VERSION")));
-                        ui.label("Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox, .ctp and .ctb, and .ags support files.");
+                        ui.label("Fast viewer for STL, OBJ, PLY, 3MF, Lychee .lys, CHITUBOX .chitubox, .ctp and .ctb, and RuneBrace .ags files.");
                         ui.label(
                             "Lychee and CHITUBOX scenes are shown with their supports, 3MF files with their colours, CTB print files as the solid their layers print.",
                         );

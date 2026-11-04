@@ -130,7 +130,7 @@ pub fn load_data(name: &Path, data: Data, options: &LoadOptions) -> Result<Scene
         "chitubox" => "CHITUBOX project (.chitubox)".to_string(),
         "ctp" => "CHITUBOX project (.ctp)".to_string(),
         "ctb" => "CHITUBOX print file (.ctb)".to_string(),
-        "ags" => "Support project (.ags)".to_string(),
+        "ags" => "RuneBrace project (.ags)".to_string(),
         other => format!("{} file", other.to_uppercase()),
     };
     let size = format_size(size);

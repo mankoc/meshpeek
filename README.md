@@ -1,6 +1,6 @@
 # MeshPeek
 
-Fast viewer for STL, OBJ, PLY, 3MF, Lychee `.lys`, CHITUBOX `.chitubox`, `.ctp` and `.ctb`, and `.ags` support files, written in Rust. Renders on the GPU, or on the CPU
+Fast viewer for STL, OBJ, PLY, 3MF, Lychee `.lys`, CHITUBOX `.chitubox`, `.ctp` and `.ctb`, and RuneBrace `.ags` files, written in Rust. Renders on the GPU, or on the CPU
 when there is no usable GPU.
 
 ## Supported files
@@ -13,7 +13,7 @@ when there is no usable GPU.
 | CHITUBOX `.chitubox` | Every model where it stands on the plate, with the supports CHITUBOX generated (also from older CHITUBOX versions) |
 | CHITUBOX `.ctp` | The same for CHITUBOX's newer project files; the supports' shapes are built from their parts |
 | CHITUBOX `.ctb` print files | The solid the sliced layers print, rebuilt from the layer images, on the printer's plate (also the encrypted files of newer CHITUBOX versions) |
-| `.ags` support projects | The model where it stands, with its supports and a raft rebuilt from their feet (hollowing is not shown) |
+| RuneBrace `.ags` projects | The model where it stands, with its supports, and the raft and bracing rebuilt from its settings (hollowing is not shown) |
 
 Models can also be opened from inside ZIP, 7z and RAR archives.
 
@@ -123,7 +123,7 @@ Windows and Ubuntu machines and attaches them to the run. Tick *publish* to also
 | `docs/formats/CHITUBOX_FILE_FORMAT.md` | CHITUBOX `.chitubox` project format specification (reverse-engineered). |
 | `docs/formats/CTP_NOTES.md` | The CHITUBOX `.ctp` project layout (reverse-engineered) and how MeshPeek builds its supports. |
 | `docs/formats/CTB_NOTES.md` | The CHITUBOX `.ctb` print file format and how MeshPeek rebuilds the solid from its layers. |
-| `docs/formats/AGS_NOTES.md` | The `.ags` support project format. |
+| `docs/formats/AGS_NOTES.md` | The RuneBrace `.ags` project format. |
 | `docs/formats/3MF_NOTES.md` | What MeshPeek reads from 3MF files, including the slicers' part, colour, painting and plate data. |
 
 The original Python implementation is kept on the `python` branch.
