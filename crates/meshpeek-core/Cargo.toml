@@ -9,7 +9,9 @@ publish.workspace = true
 
 [dependencies]
 aes = "0.8.4"
+base64 = "0.22.1"
 fast-float2 = "0.2.4"
+flate2 = "1.1.10"
 glam = "0.34.1"
 memchr = "2.8.3"
 memmap2 = "0.9.11"

@@ -207,7 +207,7 @@ impl MeshPeekApp {
             preload_results: channel(),
             preloaded_for: None,
             preferences_section: preferences::Section::default(),
-            status: "Open or drop STL, OBJ, PLY, 3MF, LYS, CHITUBOX, CTP or CTB files".into(),
+            status: "Open or drop STL, OBJ, PLY, 3MF, LYS, CHITUBOX, CTP, CTB or AGS files".into(),
             wireframe: false,
             show_objects: true,
             show_toolbar: true,

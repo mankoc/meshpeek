@@ -2,6 +2,20 @@
 
 All notable changes to MeshPeek, newest first.
 
+## 0.5.8 — 2026-11-04
+
+MeshPeek now supports `.ags` files. This release also includes the changes of 0.5.7, which had no release of its
+own: the reflectiveness slider, the background colour, faster loading (hard disks, Lychee scenes, binary PLY, solid
+7z and RAR archives), Esc closing the open window, and fixes for STL, PLY and OBJ files. They are listed in
+`CHANGELOG.md`.
+
+### Added
+- **`.ags` support projects**: the model where it stands, with its supports (tips, bends, foot cones, branches and
+  the pillars inside hollow models), built with the facets of *Support detail*. The raft is not stored in these
+  files, so it is rebuilt from the feet and shows where it runs rather than its exact shape. The files keep the
+  model solid: hollowing is listed in the (i) window but not shown. The layout, worked out from sample files, is
+  in `docs/formats/AGS_NOTES.md`; the installer offers MeshPeek for `.ags` files.
+
 ## 0.5.7 — 2026-10-24
 
 ### Added
