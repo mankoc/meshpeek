@@ -244,8 +244,8 @@ impl Header {
 fn aes_decrypt(bytes: &mut [u8]) {
     let cipher = aes::Aes256::new(&KEY.into());
     let mut previous = IV;
-    for block in bytes.chunks_exact_mut(16) {
-        let encrypted: [u8; 16] = (*block).try_into().unwrap();
+    for block in bytes.as_chunks_mut::<16>().0 {
+        let encrypted = *block;
         cipher.decrypt_block(aes::Block::from_mut_slice(block));
         block.iter_mut().zip(previous).for_each(|(b, p)| *b ^= p);
         previous = encrypted;
@@ -688,10 +688,10 @@ mod tests {
         use aes::cipher::BlockEncrypt;
         let cipher = aes::Aes256::new(&KEY.into());
         let mut previous = IV;
-        for block in bytes.chunks_exact_mut(16) {
+        for block in bytes.as_chunks_mut::<16>().0 {
             block.iter_mut().zip(previous).for_each(|(b, p)| *b ^= p);
             cipher.encrypt_block(aes::Block::from_mut_slice(block));
-            previous = (*block).try_into().unwrap();
+            previous = *block;
         }
     }
 

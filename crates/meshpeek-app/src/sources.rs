@@ -106,7 +106,7 @@ pub fn list_models(archive: &Path) -> Result<Vec<String>, String> {
         "zip" => {
             let file = std::fs::File::open(archive).map_err(|e| e.to_string())?;
             let zip = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
-            zip.file_names().filter(|n| !n.ends_with('/')).map(normal).collect()
+            zip.file_names().flatten().filter(|n| !n.ends_with('/')).map(|n| normal(&n)).collect()
         }
         "7z" => {
             let header = sevenz_rust2::Archive::open(archive).map_err(|e| e.to_string())?;

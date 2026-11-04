@@ -102,8 +102,9 @@ fn read(package: &Package, name: &str) -> std::result::Result<Vec<u8>, String> {
         Some(_) => name.to_string(),
         None => package
             .file_names()
+            .flatten() // names that are not valid text are errors
             .find(|n| n.eq_ignore_ascii_case(name))
-            .map(str::to_string)
+            .map(|n| n.into_owned())
             .ok_or_else(|| format!("{name} is missing from the package"))?,
     };
     let mut file = package.by_name(&stored).map_err(|e| format!("{name}: {e}"))?;
@@ -992,10 +993,10 @@ impl Builder {
         if index != u32::MAX && (!self.coloured || first == colour) {
             return index;
         }
-        if index != u32::MAX {
-            if let Some(&copy) = self.copies.get(&(v, colour)) {
-                return copy;
-            }
+        if index != u32::MAX
+            && let Some(&copy) = self.copies.get(&(v, colour))
+        {
+            return copy;
         }
         let new = self.vertices.len() as u32;
         self.vertices.push(position);

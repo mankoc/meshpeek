@@ -45,7 +45,7 @@ pub fn object_matrix(obj: &Value, vertices: &[[f32; 3]]) -> DMat4 {
 }
 
 /// `Ok(mesh)` or `Err(reason it was skipped)`.
-fn object_mesh(archive: &mut Archive, obj: &Value) -> std::result::Result<Mesh, String> {
+fn object_mesh(archive: &mut Archive, obj: &Value, external_files: bool) -> std::result::Result<Mesh, String> {
     let props = get(obj, "properties");
     let hash = props.and_then(|p| str_of(p, "hash")).unwrap_or("");
     let kind = str_of(obj, "type").unwrap_or("");
@@ -55,6 +55,9 @@ fn object_mesh(archive: &mut Archive, obj: &Value) -> std::result::Result<Mesh, 
     if kind == "libraryFile" {
         // Geometry lives outside the archive, e.g. Lychee's bundled benchy.stl.
         let file = props.and_then(|p| str_of(p, "file")).unwrap_or("");
+        if !external_files {
+            return Err(format!("external file not opened: {file}"));
+        }
         if file.is_empty() || !Path::new(file).exists() {
             return Err(format!("external file not found: {file}"));
         }
@@ -113,11 +116,12 @@ fn object_raft(object: Option<&Value>, mesh: &Mesh, feet: Option<Vec<RaftFoot>>,
 /// Load a `.lys` scene: its models, their supports (with `support_sides` facets round) and rafts, and the
 /// build plate.
 pub fn load(file: &Path, support_sides: u32) -> Result<Scene> {
-    load_data(file, read_file(file)?, support_sides)
+    load_data(file, read_file(file)?, support_sides, false)
 }
 
-/// Like [`load`] for contents already in memory; `file` only labels the objects.
-pub fn load_data(file: &Path, data: Data, support_sides: u32) -> Result<Scene> {
+/// Like [`load`] for contents already in memory; `file` only labels the objects. Objects that live in other files
+/// are only opened with `external_files`.
+pub fn load_data(file: &Path, data: Data, support_sides: u32, external_files: bool) -> Result<Scene> {
     let mut archive = Archive::open(data)?;
     if !archive.contains("scene.bin") {
         return Err(LoadError::format("scene.bin missing from archive"));
@@ -133,7 +137,7 @@ pub fn load_data(file: &Path, data: Data, support_sides: u32) -> Result<Scene> {
     for oid in ids(objects.and_then(|o| get(o, "allIds"))) {
         let Some(&obj) = by_id.get(oid) else { continue };
         let name = str_of(obj, "name").filter(|n| !n.is_empty()).unwrap_or(oid).to_string();
-        match object_mesh(&mut archive, obj) {
+        match object_mesh(&mut archive, obj, external_files) {
             Err(reason) => scene.skipped.push(format!("{name}: {reason}")),
             Ok(mesh) => {
                 let transform = object_matrix(obj, &mesh.vertices);

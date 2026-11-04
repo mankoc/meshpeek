@@ -10,7 +10,7 @@ use meshpeek_core::{LoadOptions, ObjectKind, load};
 fn main() {
     let mut args = std::env::args().skip(1);
     let mut file = None;
-    let mut options = LoadOptions::default();
+    let mut options = LoadOptions { external_files: true, ..LoadOptions::default() };
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--support-sides" => options.support_sides = args.next().and_then(|n| n.parse().ok()).expect("number"),

@@ -162,7 +162,7 @@ fn part_list(data: &[u8], block: usize) -> Option<Supports> {
         return None;
     }
     let (mut start, mut next, mut contacts) = (None, 0usize, 0);
-    for entry in data[list..end].chunks_exact(PART) {
+    for entry in data[list..end].as_chunks::<PART>().0 {
         if word(entry, 0)? != PART_MARKER {
             return None;
         }

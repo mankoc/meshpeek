@@ -180,7 +180,7 @@ impl Settings {
     /// The part of the settings that changes how files are loaded (changing it needs a reload).
     pub fn load_options(&self) -> LoadOptions {
         let sides = SUPPORT_DETAIL.iter().find(|(n, _)| *n == self.support_detail).map_or(12, |(_, s)| *s);
-        LoadOptions { support_sides: sides, obj_y_up: self.obj_y_up }
+        LoadOptions { support_sides: sides, obj_y_up: self.obj_y_up, external_files: true }
     }
 
     /// Put `path` first in the recent-files list (no duplicates, at most [`MAX_RECENT`]).
@@ -284,6 +284,6 @@ mod tests {
     #[test]
     fn load_options_follow_detail_and_up_axis() {
         let settings = Settings { support_detail: "Very high".into(), obj_y_up: false, ..Settings::default() };
-        assert_eq!(settings.load_options(), LoadOptions { support_sides: 48, obj_y_up: false });
+        assert_eq!(settings.load_options(), LoadOptions { support_sides: 48, obj_y_up: false, external_files: true });
     }
 }

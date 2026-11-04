@@ -112,7 +112,7 @@ Windows and Ubuntu machines and attaches them to the run. Tick *publish* to also
 
 | Path | Purpose |
 |---|---|
-| `crates/meshpeek-core` | File formats (STL, OBJ, PLY, 3MF, `.lys`, `.chitubox`, `.ctp` and `.ags` incl. supports, `.ctb`), meshes and scenes. No GPU/UI code. |
+| `crates/meshpeek-core` | Shared with StlArchivist, which depends on this crate and `meshpeek-render` by git tag. File formats (STL, OBJ, PLY, 3MF, `.lys`, `.chitubox`, `.ctp` and `.ags` incl. supports, `.ctb`), meshes and scenes. No GPU/UI code. |
 | `crates/meshpeek-render` | wgpu renderer: GPU meshes, camera, shading, plate, axes. No UI code. |
 | `crates/meshpeek-app` | The `meshpeek` desktop app (eframe/egui), icon, installer definitions. |
 | `crates/meshpeek-tools` | `meshpeek-info`, `lys-dump`, `meshpeek-bench`, `meshpeek-gen`. |

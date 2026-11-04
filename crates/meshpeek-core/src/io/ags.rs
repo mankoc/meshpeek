@@ -5,7 +5,7 @@
 //!
 //! - `ModifiedMeshDataBase64Gz`: the model, gzipped and in Base64: the vertex count (i32), the vertices (3 × f32), the
 //!   index count, the triangle indices (i32), the normal count and the normals. Without it, `ModelPath` names the
-//!   model file;
+//!   model file, which is only opened when the caller allows other files;
 //! - `ModelTransform`: the model's matrix (`M11`…`M44`, row vectors), into a world with Y up and the plate at Y = 0;
 //! - `Supports`: in that world, each with `ControlPoints` from the tip to the foot and a radius for each point.
 //!
@@ -60,8 +60,9 @@ struct Style {
     raft_thickness: f64,
 }
 
-/// Parse an `.ags` file; `path` names the file in messages, labels the objects and locates an external model.
-pub fn load_bytes(data: &[u8], path: &Path, support_sides: u32) -> Result<Scene> {
+/// Parse an `.ags` file; `path` names the file in messages and labels the objects. With `external_files`, a project
+/// without a stored model loads the file `ModelPath` names, next to `path`; otherwise it is refused.
+pub fn load_bytes(data: &[u8], path: &Path, support_sides: u32, external_files: bool) -> Result<Scene> {
     let bad = |what: String| LoadError::format(format!("{}: {what}", path.display()));
     let project: Value = serde_json::from_slice(data).map_err(|e| bad(format!("not a JSON project ({e})")))?;
     let supports_field = project.get("Supports").and_then(Value::as_array);
@@ -71,6 +72,9 @@ pub fn load_bytes(data: &[u8], path: &Path, support_sides: u32) -> Result<Scene>
         return Err(bad("not a support project (no model and no supports)".into()));
     }
     let mesh = if packed.is_empty() {
+        if !external_files {
+            return Err(bad("the model is not stored in the project".into()));
+        }
         let file = path.parent().unwrap_or(Path::new("")).join(model_path);
         load_mesh(&file).map_err(|e| bad(format!("the model is not stored in the project: {e}")))?
     } else {
@@ -495,7 +499,7 @@ mod tests {
 
     #[test]
     fn model_is_placed_and_supports_stand_on_the_plate_with_z_up() {
-        let scene = load_bytes(&project(SUPPORTS), Path::new("p.ags"), 8).unwrap();
+        let scene = load_bytes(&project(SUPPORTS), Path::new("p.ags"), 8, false).unwrap();
         assert_eq!(scene.objects.len(), 2);
         let model = &scene.objects[0];
         assert_eq!((model.name.as_str(), model.mesh.n_faces()), ("Part", 1));
@@ -605,8 +609,13 @@ mod tests {
 
     #[test]
     fn broken_projects_are_reported() {
-        assert!(load_bytes(b"{}", Path::new("p.ags"), 8).unwrap_err().to_string().contains("not a support project"));
-        assert!(load_bytes(b"not json", Path::new("p.ags"), 8).is_err());
+        assert!(
+            load_bytes(b"{}", Path::new("p.ags"), 8, false).unwrap_err().to_string().contains("not a support project")
+        );
+        assert!(load_bytes(b"not json", Path::new("p.ags"), 8, false).is_err());
+        let external = br#"{"Supports": [], "ModelPath": "../secret.stl"}"#;
+        let refused = load_bytes(external, Path::new("p.ags"), 8, false).unwrap_err().to_string();
+        assert!(refused.contains("not stored in the project"), "{refused}");
         assert!(parse_mesh(&[255, 255, 255, 255]).unwrap_err().contains("cut short"));
     }
 }

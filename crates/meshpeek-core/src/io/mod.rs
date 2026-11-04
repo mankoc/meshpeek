@@ -39,11 +39,14 @@ pub struct LoadOptions {
     pub support_sides: u32,
     /// OBJ files use Y as up (Blender, Maya, ZBrush): rotate them to this viewer's Z-up.
     pub obj_y_up: bool,
+    /// Open other files a project names (a Lychee library file, the model of an `.ags` project). Off by default:
+    /// those paths come from inside the file, so a program loading other people's files must leave it off.
+    pub external_files: bool,
 }
 
 impl Default for LoadOptions {
     fn default() -> Self {
-        Self { support_sides: 12, obj_y_up: true }
+        Self { support_sides: 12, obj_y_up: true, external_files: false }
     }
 }
 
@@ -102,7 +105,7 @@ pub fn load_data(name: &Path, data: Data, options: &LoadOptions) -> Result<Scene
     let ext = extension(name);
     let size = data.len() as u64;
     let mut scene = if ext == "lys" {
-        lys::load_data(name, data, options.support_sides)?
+        lys::load_data(name, data, options.support_sides, options.external_files)?
     } else if ext == "chitubox" {
         chitubox::load_bytes(&data, name)?
     } else if ext == "3mf" {
@@ -112,16 +115,16 @@ pub fn load_data(name: &Path, data: Data, options: &LoadOptions) -> Result<Scene
     } else if ext == "ctb" {
         ctb::load_bytes(&data, name)?
     } else if ext == "ags" {
-        ags::load_bytes(&data, name, options.support_sides)?
+        ags::load_bytes(&data, name, options.support_sides, options.external_files)?
     } else {
         let mut object = SceneObject::new(stem(name), parse_mesh(name, &data)?, name);
         if ext == "obj" && options.obj_y_up {
             object.transform = Y_UP_TO_Z_UP;
         }
-        if ext == "stl" {
-            if let Some(comment) = stl::comment(&data) {
-                object.info.push(("Comment".into(), comment));
-            }
+        if ext == "stl"
+            && let Some(comment) = stl::comment(&data)
+        {
+            object.info.push(("Comment".into(), comment));
         }
         Scene { objects: vec![object], ..Scene::default() }
     };

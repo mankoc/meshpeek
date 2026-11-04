@@ -97,6 +97,7 @@ fn matches_python_reference() {
         let options = LoadOptions {
             support_sides: reference["options"]["support_sides"].as_u64().unwrap() as u32,
             obj_y_up: reference["options"]["obj_y_up"].as_bool().unwrap(),
+            external_files: true,
         };
         let scene = load(&file, &options).unwrap();
         check_scene(path.file_stem().unwrap().to_str().unwrap(), &scene, &reference);

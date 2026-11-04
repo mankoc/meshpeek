@@ -2,7 +2,7 @@
 
 All notable changes to MeshPeek, newest first.
 
-## Unreleased
+## 0.5.9 — 2026-11-04
 
 ### Added
 - **Bracing in RuneBrace `.ags` projects**: the Xs between the supports, worked out from the project's bracing
@@ -14,6 +14,14 @@ All notable changes to MeshPeek, newest first.
   triangulate the feet, with RuneBrace's network settings (also in projects with snapping to the grid off, which had
   no bridges at all), and the foot cones
   are as high as the project says instead of running along the whole last stretch of a support.
+- `meshpeek-core` and `meshpeek-render` are now shared with StlArchivist, which builds on them straight from this
+  repository instead of keeping copies: file loading is behind the default `io` feature, `wire` turns a scene into
+  bytes for a web viewer, and the renderer gained per-object wireframes and `remove_object`, `set_mesh` and
+  `set_plates`. `zip` 9, which needs Rust 1.88.
+
+### Security
+- Loading a Lychee or `.ags` project no longer opens other files named inside it unless the program asks for that with
+  `LoadOptions::external_files`, which is off by default. The MeshPeek app turns it on, so it behaves as before.
 
 ## 0.5.8 — 2026-11-04
 

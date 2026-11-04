@@ -44,7 +44,7 @@ impl Mesh {
     /// Formats like STL repeat every shared vertex for each triangle (about 6x on a closed mesh); merging
     /// them cuts vertex memory and GPU vertex work by that factor. Matches positions bit-for-bit.
     pub fn from_corners(corners: &[[f32; 3]]) -> Self {
-        assert!(corners.len() % 3 == 0, "corner count must be a multiple of 3");
+        assert!(corners.len().is_multiple_of(3), "corner count must be a multiple of 3");
         let key = |c: &[f32; 3]| ((c[0].to_bits() as u64) << 32 | c[1].to_bits() as u64, c[2].to_bits());
         let mut order: Vec<u32> = (0..corners.len() as u32).collect();
         order.par_sort_unstable_by_key(|&i| key(&corners[i as usize]));
@@ -60,7 +60,7 @@ impl Mesh {
             }
             remap[i as usize] = (vertices.len() - 1) as u32;
         }
-        let faces = remap.chunks_exact(3).map(|t| [t[0], t[1], t[2]]).collect();
+        let faces = remap.as_chunks::<3>().0.iter().map(|t| [t[0], t[1], t[2]]).collect();
         Self::new(vertices, faces)
     }
 

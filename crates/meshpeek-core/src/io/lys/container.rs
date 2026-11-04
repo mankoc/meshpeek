@@ -43,7 +43,7 @@ impl Archive {
     /// Member names, sorted (directories joined with `/`).
     pub fn names(&self) -> Vec<String> {
         let mut names: Vec<String> = match self {
-            Self::Zip(zip) => zip.file_names().map(str::to_string).collect(),
+            Self::Zip(zip) => zip.file_names().flatten().map(|n| n.into_owned()).collect(),
             Self::Mngo(_, members) => members.keys().cloned().collect(),
         };
         names.sort();

@@ -147,12 +147,12 @@ impl Browser {
             } else {
                 "Add every model file in this folder (not in its sub-folders)"
             };
-            if ui.add_enabled(self.root.is_some(), egui::Button::new("Add all")).on_hover_text(all_hint).clicked() {
-                if let Some(root) = self.root.clone() {
-                    let models = self.models_in(&root, inside_archive);
-                    if !models.is_empty() {
-                        actions.push(Action::Add(models));
-                    }
+            if ui.add_enabled(self.root.is_some(), egui::Button::new("Add all")).on_hover_text(all_hint).clicked()
+                && let Some(root) = self.root.clone()
+            {
+                let models = self.models_in(&root, inside_archive);
+                if !models.is_empty() {
+                    actions.push(Action::Add(models));
                 }
             }
             if ui.button("🗁 Browse…").on_hover_text("Choose a folder to browse").clicked() {
@@ -233,11 +233,11 @@ impl Browser {
 
     /// Selection by click: alone, toggled (Ctrl/Cmd) or as a range from the last clicked file (Shift).
     fn click(&mut self, path: &Path, modifiers: egui::Modifiers) {
-        if modifiers.shift {
-            if let Some(range) = self.anchor.as_ref().and_then(|anchor| range(&self.order, anchor, path)) {
-                self.selected = range.into_iter().collect();
-                return;
-            }
+        if modifiers.shift
+            && let Some(range) = self.anchor.as_ref().and_then(|anchor| range(&self.order, anchor, path))
+        {
+            self.selected = range.into_iter().collect();
+            return;
         }
         if modifiers.command {
             if !self.selected.remove(path) {

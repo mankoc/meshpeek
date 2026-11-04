@@ -10,9 +10,10 @@ publish.workspace = true
 [dependencies]
 bytemuck = { version = "1.25.2", features = ["derive"] }
 glam = "0.34.1"
-meshpeek-core = { version = "0.5.8", path = "../meshpeek-core" }
+meshpeek-core = { version = "0.5.9", path = "../meshpeek-core", default-features = false }
 wgpu = "=25.0.2"
 
 [dev-dependencies]
+meshpeek-core = { version = "0.5.9", path = "../meshpeek-core" } # the tests load files
 image = { version = "0.25.9", default-features = false, features = ["png"] }
 pollster = { version = "1.0.1", default-features = false }

@@ -541,10 +541,10 @@ fn geometry(
         let length = p.total_length;
         let mut radius = 0.01_f64.max((length * 1.75).min(s.base_tip_diameter)) / 2.0;
         let mut point_radius = 0.01_f64.max(s.base_tip_point_diameter / 2.0);
-        if !p.mini {
-            if let Some(diameter) = parent_diameter(p.parent_base, p.base_point.z) {
-                point_radius = radius.min(diameter / 2.0);
-            }
+        if !p.mini
+            && let Some(diameter) = parent_diameter(p.parent_base, p.base_point.z)
+        {
+            point_radius = radius.min(diameter / 2.0);
         }
         radius = point_radius;
         if let Some(diameter) = parent_diameter(p.parent_tip, p.tip_point.z) {
@@ -619,10 +619,10 @@ fn geometry(
         let mut pr = 0.01_f64.max(s.base_tip_point_diameter / 2.0);
         if p.parent_base.is_some() {
             base_penetration = 0.0;
-            if !p.mini {
-                if let Some(diameter) = parent_diameter(p.parent_base, p.base_point.z) {
-                    pr = r.min(diameter / 2.0);
-                }
+            if !p.mini
+                && let Some(diameter) = parent_diameter(p.parent_base, p.base_point.z)
+            {
+                pr = r.min(diameter / 2.0);
             }
             r = pr;
         }
