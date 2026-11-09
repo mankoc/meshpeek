@@ -2,6 +2,19 @@
 
 All notable changes to MeshPeek, newest first.
 
+## 0.5.10 — 2026-11-09
+
+### Changed
+- **Files tab: a tick box for each model**, with its size, as in StlArchivist's model viewer. Ticking a model adds it to
+  the scene and unticking it takes it out again; files in the scene are ticked, also those opened with their folder or
+  archive. This replaces selecting files and *Add selected*.
+- **Folders and archives have a tick box too**, half ticked when only some of their models are shown: a folder's
+  models (not those of its sub-folders), all of an archive's. Next to it, the number of models.
+- Files inside archives show their size as well.
+
+### Fixed
+- Taking a file out of the scene also takes away its build plate.
+
 ## 0.5.9 — 2026-11-04
 
 ### Added

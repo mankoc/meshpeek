@@ -1720,7 +1720,7 @@ dependencies = [
 
 [[package]]
 name = "meshpeek-app"
-version = "0.5.9"
+version = "0.5.10"
 dependencies = [
  "directories",
  "eframe",
@@ -1745,7 +1745,7 @@ dependencies = [
 
 [[package]]
 name = "meshpeek-core"
-version = "0.5.9"
+version = "0.5.10"
 dependencies = [
  "aes",
  "base64",
@@ -1765,7 +1765,7 @@ dependencies = [
 
 [[package]]
 name = "meshpeek-render"
-version = "0.5.9"
+version = "0.5.10"
 dependencies = [
  "bytemuck",
  "glam",
@@ -1777,7 +1777,7 @@ dependencies = [
 
 [[package]]
 name = "meshpeek-tools"
-version = "0.5.9"
+version = "0.5.10"
 dependencies = [
  "memory-stats",
  "meshpeek-core",

@@ -73,8 +73,10 @@ pub const GUIDE: &[(&str, &[&str])] = &[
              assembly line up. File > Clear scene (Ctrl+W) removes everything.",
             "The Files tab is a file browser. Expand folders and archives with their arrow; double-click a \
              folder or an archive to go into it, and Up to go back out (above a drive it lists the drives). \
-             Double-click a model to add it to the scene, or select several (Ctrl+click, Shift+click) and press \
-             Add selected; Add all adds every model of the current folder. File > Open folder (or Browse…) \
+             Tick a model to add it to the scene and untick it to take it out again; its size is shown next to \
+             it. The tick box of a folder does the same for the models in it (not in its sub-folders), the one of \
+             an archive for all of its models; it is half ticked when only some are shown. Add all adds every \
+             model of the current folder. File > Open folder (or Browse…) \
              chooses the folder to show.",
             "ZIP, 7z and RAR archives are browsed like folders: their models are read straight from the \
              archive, nothing is unpacked to disk.",

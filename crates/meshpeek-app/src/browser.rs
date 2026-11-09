@@ -1,8 +1,8 @@
 //! The Files tab: a file browser over the file system. Folders and archives expand in place (their contents are
-//! read when first shown); double-clicking a model adds it to the scene, double-clicking a folder or an archive
-//! makes it the current location. Only folders, archives and model files are listed.
+//! read when first shown); a model's tick box puts it in the scene or takes it out, double-clicking a folder or an
+//! archive makes it the current location. Only folders, archives and model files are listed.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use eframe::egui;
@@ -25,33 +25,31 @@ pub enum Kind {
 pub struct Item {
     pub path: PathBuf,
     pub kind: Kind,
+    /// Size of a model file on disk.
+    pub size: Option<u64>,
 }
 
 /// What the user asked the browser for; the app carries it out.
 pub enum Action {
     /// Add these model files to the scene.
     Add(Vec<PathBuf>),
+    /// Take these model files out of the scene.
+    Remove(Vec<PathBuf>),
     /// Ask for a folder to browse.
     PickFolder,
 }
 
-/// The browser's location, cached listings and selection.
+/// The browser's location and cached listings.
 #[derive(Default)]
 pub struct Browser {
     /// The folder or archive (or folder inside an archive) shown; `None` lists the drives (Windows).
     root: Option<PathBuf>,
     /// Contents of folders, keyed by path: read once, until Refresh.
     listings: HashMap<PathBuf, Result<Vec<Item>, String>>,
-    /// Model entries of archives (paths inside, with `/`), keyed by archive.
-    archives: HashMap<PathBuf, Result<Vec<String>, String>>,
+    /// Model entries of archives (paths inside, with `/`) and their sizes, keyed by archive.
+    archives: HashMap<PathBuf, Result<Vec<(String, u64)>, String>>,
     /// The drives, found once (until Refresh): probing every letter can wait on slow or disconnected drives.
     drives: Option<Vec<Item>>,
-    /// Selected model files.
-    selected: BTreeSet<PathBuf>,
-    /// The file a Shift+click range starts from.
-    anchor: Option<PathBuf>,
-    /// Model files in the order they were drawn last frame (for Shift+click ranges).
-    order: Vec<PathBuf>,
 }
 
 impl Browser {
@@ -60,12 +58,8 @@ impl Browser {
         self.root.as_deref()
     }
 
-    /// Show `root` (a folder, an archive or a folder inside an archive) and clear the selection.
+    /// Show `root` (a folder, an archive or a folder inside an archive).
     pub fn set_root(&mut self, root: Option<PathBuf>) {
-        if self.root != root {
-            self.selected.clear();
-            self.anchor = None;
-        }
         self.root = root;
     }
 
@@ -78,7 +72,13 @@ impl Browser {
 
     /// The model entries of `archive` (paths inside it, with `/`, sorted), read once.
     pub fn archive_entries(&mut self, archive: &Path) -> Result<Vec<String>, String> {
-        self.archives.entry(archive.to_path_buf()).or_insert_with(|| sources::list_models(archive)).clone()
+        Ok(self.listed(archive)?.iter().map(|(name, _)| name.clone()).collect())
+    }
+
+    /// The model entries of `archive` with their sizes, read once.
+    fn listed(&mut self, archive: &Path) -> Result<&Vec<(String, u64)>, String> {
+        let listed = self.archives.entry(archive.to_path_buf()).or_insert_with(|| sources::list_models(archive));
+        listed.as_ref().map_err(Clone::clone)
     }
 
     /// The folder above the current location (the archive's folder for an archive); on Windows the drive list
@@ -105,7 +105,7 @@ impl Browser {
                 Some((archive, prefix)) => (archive, prefix),
                 None => (path.to_path_buf(), String::new()),
             };
-            self.archive_entries(&archive).map(|entries| archive_folder(&archive, &prefix, &entries))
+            self.listed(&archive).map(|entries| archive_folder(&archive, &prefix, entries))
         };
         self.listings.insert(path.to_path_buf(), listing.clone());
         listing
@@ -124,23 +124,14 @@ impl Browser {
         found
     }
 
-    /// Draw the tab; returns what the user asked for.
-    pub fn ui(&mut self, ui: &mut egui::Ui) -> Vec<Action> {
+    /// Draw the tab, ticking the files of `loaded` (files and folders in the scene); returns what the user asked for.
+    pub fn ui(&mut self, ui: &mut egui::Ui, loaded: &[PathBuf]) -> Vec<Action> {
         let mut actions = Vec::new();
         let inside_archive = self.root.as_deref().is_some_and(|r| !r.is_dir());
         ui.horizontal_wrapped(|ui| {
             let up = self.parent();
             if ui.add_enabled(up.is_some(), egui::Button::new("⬆ Up")).on_hover_text("Go up one folder").clicked() {
                 self.set_root(up.flatten());
-            }
-            let selected = self.selected.len();
-            let add_selected = egui::Button::new(format!("Add selected ({selected})"));
-            if ui
-                .add_enabled(selected > 0, add_selected)
-                .on_hover_text("Add the selected files to the scene (Ctrl+click and Shift+click select several)")
-                .clicked()
-            {
-                actions.push(Action::Add(std::mem::take(&mut self.selected).into_iter().collect()));
             }
             let all_hint = if inside_archive {
                 "Add every model of this archive folder, sub-folders included"
@@ -170,7 +161,6 @@ impl Browser {
             Some(root) => self.children(&root),
             None => Ok(self.drives.get_or_insert_with(drives).clone()),
         };
-        let mut order = Vec::new();
         egui::ScrollArea::both().auto_shrink(false).show(ui, |ui| match items {
             Err(e) => {
                 ui.colored_label(ui.visuals().warn_fg_color, format!("Cannot read this location: {e}"));
@@ -180,24 +170,52 @@ impl Browser {
             }
             Ok(items) => {
                 for item in &items {
-                    self.row(ui, item, &mut order, &mut actions);
+                    self.row(ui, item, loaded, &mut actions);
                 }
             }
         });
-        self.order = order;
         actions
     }
 
     /// One row; folders and archives expand to their contents (read when first opened).
-    fn row(&mut self, ui: &mut egui::Ui, item: &Item, order: &mut Vec<PathBuf>, actions: &mut Vec<Action>) {
+    fn row(&mut self, ui: &mut egui::Ui, item: &Item, loaded: &[PathBuf], actions: &mut Vec<Action>) {
         let name = display_name(&item.path);
         match item.kind {
             Kind::Folder | Kind::Archive => {
                 let icon = if item.kind == Kind::Folder { "🗀" } else { "📦" };
-                let response = egui::CollapsingHeader::new(format!("{icon} {name}"))
-                    .id_salt(&item.path)
-                    .default_open(false)
-                    .show(ui, |ui| match self.children(&item.path) {
+                // the tick box: a folder's own model files (sub-folders can be huge), all the models of an archive
+                let in_archive = !item.path.is_dir();
+                let models = if item.kind == Kind::Folder && !in_archive && self.children(&item.path).is_err() {
+                    Vec::new() // unreadable: shown as such when opened
+                } else {
+                    self.models_in(&item.path, in_archive)
+                };
+                let is_shown = |p: &PathBuf| loaded.iter().any(|l| p.starts_with(l));
+                let shown_count = models.iter().filter(|p| is_shown(p)).count();
+                let mut all = !models.is_empty() && shown_count == models.len();
+                let id = ui.make_persistent_id(&item.path);
+                let state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false);
+                let (_, header, _) = state
+                    .show_header(ui, |ui| {
+                        let partly = shown_count > 0 && !all;
+                        let tick =
+                            ui.add_enabled(!models.is_empty(), egui::Checkbox::new(&mut all, "").indeterminate(partly));
+                        if tick.changed() {
+                            actions.push(if all {
+                                Action::Add(models.iter().filter(|p| !is_shown(p)).cloned().collect())
+                            } else {
+                                Action::Remove(models.iter().filter(|p| is_shown(p)).cloned().collect())
+                            });
+                        }
+                        let label = ui.add(egui::Label::new(format!("{icon} {name}")).sense(egui::Sense::click()));
+                        if !models.is_empty() {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.weak(models.len().to_string())
+                            });
+                        }
+                        label
+                    })
+                    .body(|ui| match self.children(&item.path) {
                         Err(e) => {
                             ui.colored_label(ui.visuals().warn_fg_color, e);
                         }
@@ -206,54 +224,39 @@ impl Browser {
                         }
                         Ok(children) => {
                             for child in &children {
-                                self.row(ui, child, order, actions);
+                                self.row(ui, child, loaded, actions);
                             }
                         }
                     });
-                let header = response.header_response.on_hover_text(item.path.display().to_string());
-                if header.double_clicked() {
+                let hint = format!("{}\nDouble-click to go into it", item.path.display());
+                if header.inner.on_hover_text(hint).double_clicked() {
                     self.set_root(Some(item.path.clone()));
                 }
             }
             Kind::Model => {
-                order.push(item.path.clone());
-                let selected = self.selected.contains(&item.path);
-                let response = ui
-                    .selectable_label(selected, format!("🗋 {name}"))
-                    .on_hover_text(format!("{}\nDouble-click to add it to the scene", item.path.display()));
-                if response.double_clicked() {
-                    actions.push(Action::Add(vec![item.path.clone()]));
-                } else if response.clicked() {
-                    let modifiers = ui.input(|i| i.modifiers);
-                    self.click(&item.path, modifiers);
-                }
+                // in the scene on its own, or with a folder or archive opened whole
+                let mut shown = loaded.iter().any(|p| item.path.starts_with(p));
+                ui.horizontal(|ui| {
+                    let tick = ui.checkbox(&mut shown, name);
+                    if tick.on_hover_text(item.path.display().to_string()).changed() {
+                        actions.push(if shown {
+                            Action::Add(vec![item.path.clone()])
+                        } else {
+                            Action::Remove(vec![item.path.clone()])
+                        });
+                    }
+                    if let Some(size) = item.size {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.weak(match size {
+                                s if s < 1 << 20 => format!("{} KB", s.div_ceil(1024)),
+                                s => format!("{:.1} MB", s as f64 / (1u64 << 20) as f64),
+                            })
+                        });
+                    }
+                });
             }
         }
     }
-
-    /// Selection by click: alone, toggled (Ctrl/Cmd) or as a range from the last clicked file (Shift).
-    fn click(&mut self, path: &Path, modifiers: egui::Modifiers) {
-        if modifiers.shift
-            && let Some(range) = self.anchor.as_ref().and_then(|anchor| range(&self.order, anchor, path))
-        {
-            self.selected = range.into_iter().collect();
-            return;
-        }
-        if modifiers.command {
-            if !self.selected.remove(path) {
-                self.selected.insert(path.to_path_buf());
-            }
-        } else {
-            self.selected = BTreeSet::from([path.to_path_buf()]);
-        }
-        self.anchor = Some(path.to_path_buf());
-    }
-}
-
-/// The files of `order` from `a` to `b` (either way round), if both are listed.
-fn range(order: &[PathBuf], a: &Path, b: &Path) -> Option<Vec<PathBuf>> {
-    let (i, j) = (order.iter().position(|p| p == a)?, order.iter().position(|p| p == b)?);
-    Some(order[i.min(j)..=i.max(j)].to_vec())
 }
 
 /// The last component of a path (a drive keeps its whole name).
@@ -285,7 +288,8 @@ fn read_folder(dir: &Path) -> Result<Vec<Item>, String> {
             } else {
                 return None;
             };
-            Some(Item { path, kind })
+            let size = (kind == Kind::Model).then(|| entry.metadata().map(|m| m.len()).ok()).flatten();
+            Some(Item { path, kind, size })
         })
         .collect();
     sort(&mut items);
@@ -293,9 +297,9 @@ fn read_folder(dir: &Path) -> Result<Vec<Item>, String> {
 }
 
 /// The rows of the folder `prefix` (empty = top level) inside `archive`, from its model `entries`.
-fn archive_folder(archive: &Path, prefix: &str, entries: &[String]) -> Vec<Item> {
+fn archive_folder(archive: &Path, prefix: &str, entries: &[(String, u64)]) -> Vec<Item> {
     let mut items: Vec<Item> = Vec::new();
-    for entry in entries {
+    for (entry, size) in entries {
         let rest = if prefix.is_empty() {
             entry.as_str()
         } else {
@@ -310,7 +314,8 @@ fn archive_folder(archive: &Path, prefix: &str, entries: &[String]) -> Vec<Item>
         };
         let path = archive.join(prefix).join(first);
         if !items.iter().any(|i| i.path == path) {
-            items.push(Item { path, kind: if deeper { Kind::Folder } else { Kind::Model } });
+            let (kind, size) = if deeper { (Kind::Folder, None) } else { (Kind::Model, Some(*size)) };
+            items.push(Item { path, kind, size });
         }
     }
     sort(&mut items);
@@ -330,7 +335,7 @@ fn drives() -> Vec<Item> {
     (b'A'..=b'Z')
         .map(|letter| PathBuf::from(format!("{}:\\", letter as char)))
         .filter(|drive| drive.exists())
-        .map(|path| Item { path, kind: Kind::Folder })
+        .map(|path| Item { path, kind: Kind::Folder, size: None })
         .collect()
 }
 
@@ -341,7 +346,7 @@ mod tests {
     #[test]
     fn archive_folders_list_one_level() {
         let archive = Path::new("pack.zip");
-        let entries = ["a.stl", "inner/b.obj", "inner/deep/c.ply"].map(String::from);
+        let entries = ["a.stl", "inner/b.obj", "inner/deep/c.ply"].map(|n| (n.to_string(), 7));
         let top = archive_folder(archive, "", &entries);
         assert_eq!(
             top.iter().map(|i| (display_name(&i.path), i.kind)).collect::<Vec<_>>(),
@@ -364,12 +369,5 @@ mod tests {
         }
         let names: Vec<String> = read_folder(&dir).unwrap().iter().map(|i| display_name(&i.path)).collect();
         assert_eq!(names, ["sub", "A.obj", "b.stl", "pack.zip"]);
-    }
-
-    #[test]
-    fn shift_click_selects_a_range_in_display_order() {
-        let order: Vec<PathBuf> = ["a", "b", "c", "d"].iter().map(PathBuf::from).collect();
-        assert_eq!(range(&order, Path::new("c"), Path::new("a")).unwrap().len(), 3);
-        assert!(range(&order, Path::new("x"), Path::new("a")).is_none());
     }
 }

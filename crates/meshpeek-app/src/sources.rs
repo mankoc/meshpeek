@@ -100,17 +100,24 @@ fn normal(name: &str) -> String {
     name.replace('\\', "/")
 }
 
-/// The model entries of `archive` (names with `/`), sorted without regard to case.
-pub fn list_models(archive: &Path) -> Result<Vec<String>, String> {
-    let mut names: Vec<String> = match extension(archive).as_str() {
+/// The model entries of `archive` (names with `/`) with their unpacked sizes, sorted without regard to case.
+pub fn list_models(archive: &Path) -> Result<Vec<(String, u64)>, String> {
+    let mut names: Vec<(String, u64)> = match extension(archive).as_str() {
         "zip" => {
             let file = std::fs::File::open(archive).map_err(|e| e.to_string())?;
-            let zip = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
-            zip.file_names().flatten().filter(|n| !n.ends_with('/')).map(|n| normal(&n)).collect()
+            let mut zip = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+            let mut names = Vec::new();
+            for i in 0..zip.len() {
+                let Ok(entry) = zip.by_index_raw(i) else { continue };
+                if let (Ok(name), false) = (entry.name(), entry.is_dir()) {
+                    names.push((normal(&name), entry.size())); // names that are not valid text are skipped
+                }
+            }
+            names
         }
         "7z" => {
             let header = sevenz_rust2::Archive::open(archive).map_err(|e| e.to_string())?;
-            header.files.iter().filter(|e| !e.is_directory()).map(|e| normal(e.name())).collect()
+            header.files.iter().filter(|e| !e.is_directory()).map(|e| (normal(e.name()), e.size)).collect()
         }
         _ => {
             let list = unrar::Archive::new(archive).open_for_listing().map_err(|e| e.to_string())?;
@@ -118,14 +125,14 @@ pub fn list_models(archive: &Path) -> Result<Vec<String>, String> {
             for header in list {
                 let header = header.map_err(|e| e.to_string())?;
                 if header.is_file() {
-                    names.push(normal(&header.filename.to_string_lossy()));
+                    names.push((normal(&header.filename.to_string_lossy()), header.unpacked_size));
                 }
             }
             names
         }
     };
-    names.retain(|n| is_model(Path::new(n)));
-    names.sort_by_key(|n| n.to_lowercase());
+    names.retain(|(n, _)| is_model(Path::new(n)));
+    names.sort_by_key(|(n, _)| n.to_lowercase());
     Ok(names)
 }
 
@@ -256,7 +263,7 @@ mod tests {
         }
         zip.finish().unwrap();
 
-        assert_eq!(list_models(&archive).unwrap(), ["a.stl", "inner/c.ply"]);
+        assert_eq!(list_models(&archive).unwrap(), [("a.stl".to_string(), 3), ("inner/c.ply".to_string(), 3)]);
         assert_eq!(read_entry(&archive, "inner/c.ply").unwrap(), b"ply");
 
         let virtual_path = archive.join("inner/c.ply");
@@ -289,7 +296,9 @@ mod tests {
         writer.finish().unwrap();
 
         for archive in [&solid, &separate] {
-            assert_eq!(list_models(archive).unwrap(), ["a.stl", "b/c.obj"]);
+            let names: Vec<String> = list_models(archive).unwrap().into_iter().map(|(n, _)| n).collect();
+            assert_eq!(names, ["a.stl", "b/c.obj"]);
+            assert_eq!(list_models(archive).unwrap()[1].1, 6); // "second"
             assert_eq!(read_entry(archive, "b/c.obj").unwrap(), b"second");
             assert_eq!(read_entry(archive, "a.stl").unwrap(), b"first");
             assert!(read_entry(archive, "z.stl").unwrap_err().contains("not found"));

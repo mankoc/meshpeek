@@ -115,6 +115,8 @@ pub struct MeshPeekApp {
     preferences_section: preferences::Section,
     /// Rows of the objects tree; a model's supports follow it.
     entries: Vec<Entry>,
+    /// Build plates in the scene, with the file each came from.
+    plates: Vec<(PathBuf, meshpeek_core::Plate)>,
     /// Objects that could not be loaded, as `"<name>: <reason>"`.
     skipped: Vec<String>,
     /// Files in the scene, in the order they were opened (for Reload).
@@ -197,6 +199,7 @@ impl MeshPeekApp {
             settings: Settings::load(),
             draft: None,
             entries: Vec::new(),
+            plates: Vec::new(),
             skipped: Vec::new(),
             loaded_paths: Vec::new(),
             pending: 0,
@@ -346,6 +349,9 @@ impl MeshPeekApp {
             if last {
                 self.pending -= 1;
             }
+            if !self.loaded_paths.iter().any(|p| path.starts_with(p)) {
+                continue; // its tick was taken off while it loaded
+            }
             let file = match result {
                 Ok(file) => file,
                 Err(e) => {
@@ -358,6 +364,7 @@ impl MeshPeekApp {
             let triangles: usize = file.objects.iter().map(|o| o.mesh.triangles).sum();
             for plate in &file.plates {
                 self.viewport.renderer.add_plate(*plate);
+                self.plates.push((path.clone(), *plate));
             }
             for obj in file.objects {
                 let style = self.style(obj.kind, self.model_count(), &self.settings);
@@ -411,11 +418,51 @@ impl MeshPeekApp {
         }
     }
 
+    /// Take one file's objects out of the scene (its tick box in the Files tab).
+    fn remove_file(&mut self, path: &Path) {
+        // opened with its folder or archive: the folder's other files stay, now as files of their own
+        if let Some(at) = self.loaded_paths.iter().position(|p| p != path && path.starts_with(p)) {
+            let folder = self.loaded_paths.remove(at);
+            let mut rest: Vec<PathBuf> =
+                self.entries.iter().map(|e| e.source.clone()).filter(|s| s.starts_with(&folder)).collect();
+            rest.dedup(); // a file's objects are next to each other
+            self.loaded_paths.extend(rest);
+        }
+        self.loaded_paths.retain(|p| p != path);
+        let mut kept = Vec::with_capacity(self.entries.len());
+        let mut moved = vec![None; self.entries.len()]; // old index -> new index
+        for (index, entry) in std::mem::take(&mut self.entries).into_iter().enumerate() {
+            if entry.source == path {
+                self.viewport.renderer.remove_object(entry.id);
+                if self.viewport.focus == Some(entry.id) {
+                    self.viewport.focus = None;
+                }
+            } else {
+                moved[index] = Some(kept.len());
+                kept.push(entry);
+            }
+        }
+        for entry in &mut kept {
+            entry.parent = entry.parent.and_then(|p| moved[p]); // supports belong to the same file as their model
+        }
+        self.entries = kept;
+        self.plates.retain(|(source, _)| source != path);
+        self.viewport.renderer.set_plates(self.plates.iter().map(|(_, plate)| *plate));
+        self.info_for = None;
+        if self.entries.is_empty() {
+            self.clear(); // also takes away the build plates
+        } else {
+            self.apply_styles(&self.settings.clone()); // "Colour objects" counts the models again
+        }
+        self.status = format!("Removed {}", file_name(path));
+    }
+
     /// Empty the scene.
     fn clear(&mut self) {
         self.viewport.renderer.clear();
         self.viewport.focus = None;
         self.entries.clear();
+        self.plates.clear();
         self.info_for = None;
         self.skipped.clear();
         self.loaded_paths.clear();
@@ -881,9 +928,11 @@ impl MeshPeekApp {
 
     /// The Files tab: the file browser; double-clicked and added files go into the scene.
     fn files_panel(&mut self, ui: &mut egui::Ui) {
-        for action in self.browser.ui(ui) {
+        let loaded = self.loaded_paths.clone();
+        for action in self.browser.ui(ui, &loaded) {
             match action {
                 browser::Action::Add(paths) => self.open_files(&ui.ctx().clone(), paths),
+                browser::Action::Remove(paths) => paths.iter().for_each(|p| self.remove_file(p)),
                 browser::Action::PickFolder => self.open_folder_dialog(),
             }
         }
@@ -1041,7 +1090,7 @@ impl MeshPeekApp {
 
     /// Test hook: `MESHPEEK_SNAPSHOT_ACTIONS="theme=Light;center=Bust;view=Front;orbit=90,0;pan=100,0;dolly=4;controls;guide;about;preferences"` is
     /// applied once loading finished, before the snapshot. `preferences=<section>` opens Preferences on a section. `wait=<ms>` pauses (background preloads go on) and
-    /// takes the preloads that finished; `next` / `previous` step through the folder like the arrow keys; `files` shows the Files tab; `arrange` arranges the objects; `colours` colours each model; `updates` checks for updates.
+    /// takes the preloads that finished; `remove=<file name>` unticks a file in the Files tab; `next` / `previous` step through the folder like the arrow keys; `files` shows the Files tab; `arrange` arranges the objects; `colours` colours each model; `updates` checks for updates.
     fn snapshot_actions(&mut self, ctx: &egui::Context) {
         let Ok(actions) = std::env::var("MESHPEEK_SNAPSHOT_ACTIONS") else { return };
         for action in actions.split(';').map(str::trim) {
@@ -1072,6 +1121,10 @@ impl MeshPeekApp {
                     if let Some(section) = preferences::Section::named(name) {
                         self.preferences_section = section;
                     }
+                }
+                Some(("remove", name)) => {
+                    let file = self.entries.iter().find(|e| file_name(&e.source) == name).map(|e| e.source.clone());
+                    file.inspect(|f| self.remove_file(f));
                 }
                 Some(("wait", ms)) => {
                     std::thread::sleep(std::time::Duration::from_millis(ms.parse().unwrap_or(0)));
