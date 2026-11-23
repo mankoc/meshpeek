@@ -101,7 +101,7 @@ scripts/build.sh --check              # only the checks
 ```
 
 The Windows `meshpeek.exe` is self-contained (static C runtime): the zip can be unpacked and run anywhere on
-Windows 10 1909 or newer. The MSI installs it under Program Files with a Start-menu entry. The Linux `.deb`
+Windows 10 1909 or newer. The MSI installs it under Program Files with a Start-menu entry. Its options include Explorer thumbnails, and replacing those of other programs. The Linux `.deb`
 depends on `mesa-vulkan-drivers` for the CPU fallback.
 
 On GitHub: Actions → **Build packages** → **Run workflow** (manual only) builds all four packages on clean
@@ -115,6 +115,7 @@ Windows and Ubuntu machines and attaches them to the run. Tick *publish* to also
 | `crates/meshpeek-core` | Shared with StlArchivist, which depends on this crate and `meshpeek-render` by git tag. File formats (STL, OBJ, PLY, 3MF, `.lys`, `.chitubox`, `.ctp` and `.ags` incl. supports, `.ctb`), meshes and scenes. No GPU/UI code. |
 | `crates/meshpeek-render` | wgpu renderer: GPU meshes, camera, shading, plate, axes. No UI code. |
 | `crates/meshpeek-app` | The `meshpeek` desktop app (eframe/egui), icon, installer definitions. |
+| `crates/meshpeek-thumbs` | Explorer thumbnails: CPU rasterizer, COM provider (`meshpeek_thumbs.dll`), registration. |
 | `crates/meshpeek-tools` | `meshpeek-info`, `lys-dump`, `meshpeek-bench`, `meshpeek-gen`. |
 | `samples/` | Sample models (Git LFS) and the reference data the golden tests compare against. |
 | `scripts/` | Build and packaging scripts. |

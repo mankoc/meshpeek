@@ -162,8 +162,32 @@ fn page(ui: &mut egui::Ui, draft: &mut Settings, section: Section) {
                 crate::app::open_default_apps_settings();
             }
             ui.end_row();
+            #[cfg(windows)]
+            thumbnails(ui);
         }
     });
+}
+
+/// Whether MeshPeek draws Explorer's thumbnails also where another program did (applied at once: it is kept in the
+/// registry, not in the settings).
+#[cfg(windows)]
+fn thumbnails(ui: &mut egui::Ui) {
+    use meshpeek_thumbs::register;
+    ui.label("Explorer thumbnails:");
+    if register::installed() {
+        let mut replacing = register::replacing();
+        let hint = "Off: MeshPeek's thumbnails are only used where no other program provides them, and for file types it \
+                    is the default app of. On: for all its file types. Switching it off gives the others theirs back.";
+        if ui.checkbox(&mut replacing, "Replace other programs'").on_hover_text(hint).changed() {
+            let done = if replacing { register::replace() } else { register::restore() };
+            if let Err(e) = done {
+                log::warn!("could not change the thumbnail provider: {e}");
+            }
+        }
+    } else {
+        ui.weak("Not installed (an option of the installer)");
+    }
+    ui.end_row();
 }
 
 /// A sub-heading row of a settings grid.

@@ -2,6 +2,9 @@
 //!
 //!     meshpeek [--cpu] [files...]
 //!
+//! `--thumbnails replace|restore|notify` (Windows) is for the installer: MeshPeek takes over other programs' Explorer
+//! thumbnails, gives them back, or just tells Explorer about a change, and quits.
+//!
 //! `--cpu` forces the software renderer (WARP on Windows, lavapipe/llvmpipe on Linux).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // no console window in release builds
@@ -27,6 +30,19 @@ use meshpeek_render::wgpu;
 
 fn main() -> eframe::Result {
     env_logger::init();
+    #[cfg(windows)]
+    if std::env::args().nth(1).as_deref() == Some("--thumbnails") {
+        use meshpeek_thumbs::register;
+        let done = match std::env::args().nth(2).as_deref() {
+            Some("replace") => register::replace(),
+            Some("restore") => register::restore(),
+            _ => {
+                register::notify();
+                Ok(())
+            }
+        };
+        std::process::exit(done.is_err() as i32);
+    }
     let mut cpu = false;
     let mut files = Vec::new();
     for arg in std::env::args().skip(1) {

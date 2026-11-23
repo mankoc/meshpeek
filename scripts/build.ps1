@@ -68,7 +68,7 @@ if (-not $SkipTests) {
 if ($Check) { Write-Host "`nChecks passed." -ForegroundColor Green; exit 0 }
 
 Step "Building release executable"
-Run { cargo build --release -p meshpeek-app }
+Run { cargo build --release -p meshpeek-app -p meshpeek-thumbs }
 
 Step "Collecting third-party licenses"
 if (-not (Get-Command cargo-about -ErrorAction SilentlyContinue)) {

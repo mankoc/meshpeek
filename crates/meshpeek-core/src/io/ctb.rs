@@ -62,6 +62,20 @@ const MAX_CELLS: usize = 64 << 20;
 /// Average grey level (0–255) of a cell at the surface.
 const ISO: f32 = 127.5;
 
+/// Where the header of the large preview picture is, in either format.
+pub(super) fn preview_offset(data: &[u8]) -> Option<usize> {
+    match word(data, 0)? {
+        MAGIC => word(data, 60).map(|w| w as usize),
+        MAGIC_ENCRYPTED => {
+            let at = word(data, 8)? as usize;
+            let mut settings = data.get(at..at.checked_add(SETTINGS)?)?.to_vec();
+            aes_decrypt(&mut settings);
+            word(&settings, 68).map(|w| w as usize)
+        }
+        _ => None,
+    }
+}
+
 /// The header fields MeshPeek uses, from either format.
 struct Header {
     version: u32,

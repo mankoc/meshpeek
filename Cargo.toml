@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/meshpeek-core", "crates/meshpeek-render", "crates/meshpeek-app", "crates/meshpeek-tools"]
+members = ["crates/meshpeek-core", "crates/meshpeek-render", "crates/meshpeek-app", "crates/meshpeek-thumbs", "crates/meshpeek-tools"]
 
 [workspace.package]
-version = "0.5.10"
+version = "0.5.11"
 edition = "2024"
 rust-version = "1.88"
 license = "CC-BY-NC-SA-4.0"

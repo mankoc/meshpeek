@@ -7,6 +7,7 @@ pub mod ctp;
 pub mod lys;
 pub mod obj;
 pub mod ply;
+pub mod preview;
 pub mod stl;
 pub mod threemf;
 

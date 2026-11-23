@@ -2,6 +2,16 @@
 
 All notable changes to MeshPeek, newest first.
 
+## 0.5.11 — 2026-11-23
+
+### Added
+- **Thumbnails in Windows Explorer** for STL, OBJ, PLY, 3MF, LYS, CHITUBOX, CTP, CTB and AGS files, an option of the
+  installer (on by default): models with their supports, or the preview a CHITUBOX file stores. They are used where no
+  other program provides thumbnails and for file types MeshPeek is the default app of. The option *Replace other
+  programs' thumbnails* (off by default, also in *Preferences → System*) uses them for all these types; switching it
+  off or uninstalling gives the other programs theirs back. Files above 300 MB get none unless they store a preview.
+- The installer has a page to choose the options and the folder.
+
 ## 0.5.10 — 2026-11-09
 
 ### Changed

@@ -53,6 +53,27 @@
                     <Component Id='ThirdPartyLicenses' Guid='*'>
                         <File Id='ThirdParty' Name='THIRD-PARTY-LICENSES.html' DiskId='1' Source='$(var.CargoTargetBinDir)\THIRD-PARTY-LICENSES.html' KeyPath='yes' />
                     </Component>
+                    <!-- Explorer's thumbnails: used for types no other program provides them for (SystemFileAssociations)
+                         and for those MeshPeek is the default program of (MeshPeek.Model) -->
+                    <Component Id='ThumbnailProvider' Guid='6E0B2C5A-9C43-4B0B-8C0E-3B5B1F0D7A94'>
+                        <File Id='ThumbnailDll' Name='meshpeek_thumbs.dll' DiskId='1' Source='$(var.CargoTargetBinDir)\meshpeek_thumbs.dll' KeyPath='yes' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\CLSID\{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}' Type='string' Value='MeshPeek thumbnails' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\CLSID\{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}\InprocServer32' Type='string' Value='[#ThumbnailDll]' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\CLSID\{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}\InprocServer32' Name='ThreadingModel' Type='string' Value='Apartment' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\MeshPeek.Model\shellex\{e357fccd-a995-4576-b01f-234630154e96}' Type='string' Value='{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\SystemFileAssociations\.stl\shellex\{e357fccd-a995-4576-b01f-234630154e96}' Type='string' Value='{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\SystemFileAssociations\.obj\shellex\{e357fccd-a995-4576-b01f-234630154e96}' Type='string' Value='{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\SystemFileAssociations\.ply\shellex\{e357fccd-a995-4576-b01f-234630154e96}' Type='string' Value='{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\SystemFileAssociations\.3mf\shellex\{e357fccd-a995-4576-b01f-234630154e96}' Type='string' Value='{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\SystemFileAssociations\.lys\shellex\{e357fccd-a995-4576-b01f-234630154e96}' Type='string' Value='{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\SystemFileAssociations\.chitubox\shellex\{e357fccd-a995-4576-b01f-234630154e96}' Type='string' Value='{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\SystemFileAssociations\.ctp\shellex\{e357fccd-a995-4576-b01f-234630154e96}' Type='string' Value='{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\SystemFileAssociations\.ctb\shellex\{e357fccd-a995-4576-b01f-234630154e96}' Type='string' Value='{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}' />
+                <RegistryValue Root='HKLM' Key='Software\Classes\SystemFileAssociations\.ags\shellex\{e357fccd-a995-4576-b01f-234630154e96}' Type='string' Value='{8C5B6D0E-3F0A-4A3D-9B52-71D7A4C2E6F1}' />
+                    </Component>
+                    <Component Id='ReplaceThumbnails' Guid='B1C7E3D2-58F4-4D0A-A6B9-0E9D4C2F7318'>
+                        <RegistryValue Root='HKLM' Key='Software\MeshPeek' Name='ReplaceThumbnails' Type='integer' Value='1' KeyPath='yes' />
+                    </Component>
                 </Directory>
             </Directory>
             <Directory Id='ProgramMenuFolder'>
@@ -102,7 +123,7 @@
             </Component>
         </DirectoryRef>
 
-        <Feature Id='Application' Title='MeshPeek' Level='1' ConfigurableDirectory='APPLICATIONFOLDER'>
+        <Feature Id='Application' Title='MeshPeek' Description='The viewer.' Level='1' Absent='disallow' AllowAdvertise='no' ConfigurableDirectory='APPLICATIONFOLDER'>
             <ComponentRef Id='Executable' />
             <ComponentRef Id='License' />
             <ComponentRef Id='ThirdPartyLicenses' />
@@ -110,8 +131,34 @@
             <ComponentRef Id='OpenWith' />
         </Feature>
 
-        <Feature Id='SendTo' Title='"Send to" menu entry' Level='1'>
+        <Feature Id='SendTo' Title='"Send to" menu entry' Description='MeshPeek in the "Send to" menu of Explorer.' Level='1' AllowAdvertise='no'>
             <ComponentRef Id='SendToShortcut' />
         </Feature>
+
+        <Feature Id='Thumbnails' Title='Explorer thumbnails' Level='1' AllowAdvertise='no' Display='expand'
+            Description='Pictures of STL, OBJ, PLY, 3MF, LYS, CHITUBOX, CTP, CTB and AGS files in Explorer, where no other program provides them.'>
+            <ComponentRef Id='ThumbnailProvider' />
+            <Feature Id='ReplaceOthers' Title="Replace other programs' thumbnails" Level='1000' AllowAdvertise='no'
+                Description='Use them also where another program (CHITUBOX, F3D...) provides thumbnails now. Can be undone in the Preferences of MeshPeek; uninstalling gives them back.'>
+                <ComponentRef Id='ReplaceThumbnails' />
+            </Feature>
+        </Feature>
+
+        <!-- for the current user, by the program: it keeps what was registered before, to give it back -->
+        <CustomAction Id='TakeThumbnails' FileKey='MeshPeekExe' ExeCommand='--thumbnails replace' Execute='immediate' Return='ignore' />
+        <CustomAction Id='GiveThumbnailsBack' FileKey='MeshPeekExe' ExeCommand='--thumbnails restore' Execute='immediate' Return='ignore' />
+        <CustomAction Id='TellExplorer' FileKey='MeshPeekExe' ExeCommand='--thumbnails notify' Execute='immediate' Return='ignore' />
+        <InstallExecuteSequence>
+            <Custom Action='GiveThumbnailsBack' Before='InstallInitialize'>!ReplaceOthers=3 AND NOT UPGRADINGPRODUCTCODE AND (&amp;ReplaceOthers=2 OR REMOVE~="ALL")</Custom>
+            <Custom Action='TakeThumbnails' After='InstallFinalize'>&amp;ReplaceOthers=3</Custom>
+            <Custom Action='TellExplorer' After='TakeThumbnails'>NOT REMOVE~="ALL"</Custom>
+        </InstallExecuteSequence>
+
+        <UI>
+            <UIRef Id='WixUI_FeatureTree' />
+            <!-- no licence page -->
+            <Publish Dialog='WelcomeDlg' Control='Next' Event='NewDialog' Value='CustomizeDlg' Order='99'>NOT Installed</Publish>
+            <Publish Dialog='CustomizeDlg' Control='Back' Event='NewDialog' Value='WelcomeDlg' Order='99'>NOT Installed</Publish>
+        </UI>
     </Product>
 </Wix>
