@@ -2,6 +2,17 @@
 
 All notable changes to MeshPeek, newest first.
 
+## 0.5.14 — 2026-11-23
+
+### Changed
+- **Files tab: the current folder with links**: click a folder or an archive to go down into it, and *..* to go up; above
+  a drive it lists all the drives. Folders no longer expand in place, and folders and archives are only read when they
+  are entered or ticked.
+
+### Fixed
+- Explorer thumbnails did not appear: when Explorer asked for several at once, the thumbnail provider waited for
+  itself for ever.
+
 ## 0.5.11 — 2026-11-23
 
 ### Added

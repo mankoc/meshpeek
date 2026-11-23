@@ -1,6 +1,6 @@
-//! The Files tab: a file browser over the file system. Folders and archives expand in place (their contents are
-//! read when first shown); a model's tick box puts it in the scene or takes it out, double-clicking a folder or an
-//! archive makes it the current location. Only folders, archives and model files are listed.
+//! The Files tab: the current folder, with links up to the folder above (the drives at the top) and down into its
+//! folders and archives (read when entered). A model's tick box puts it in the scene or takes it out. Only folders,
+//! archives and model files are listed.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -39,10 +39,10 @@ pub enum Action {
     PickFolder,
 }
 
-/// The browser's location and cached listings.
+/// The browser's current folder and cached listings.
 #[derive(Default)]
 pub struct Browser {
-    /// The folder or archive (or folder inside an archive) shown; `None` lists the drives (Windows).
+    /// The current folder or archive (or folder inside an archive); `None` lists the drives.
     root: Option<PathBuf>,
     /// Contents of folders, keyed by path: read once, until Refresh.
     listings: HashMap<PathBuf, Result<Vec<Item>, String>>,
@@ -58,9 +58,9 @@ impl Browser {
         self.root.as_deref()
     }
 
-    /// Show `root` (a folder, an archive or a folder inside an archive).
+    /// Go to `root` (a folder, an archive or a folder inside an archive; `None`: the drives).
     pub fn set_root(&mut self, root: Option<PathBuf>) {
-        self.root = root;
+        self.root = root.map(|r| std::path::absolute(&r).unwrap_or(r)); // relative paths have no folders above them
     }
 
     /// Forget all cached listings, so folders and archives are read again.
@@ -79,17 +79,6 @@ impl Browser {
     fn listed(&mut self, archive: &Path) -> Result<&Vec<(String, u64)>, String> {
         let listed = self.archives.entry(archive.to_path_buf()).or_insert_with(|| sources::list_models(archive));
         listed.as_ref().map_err(Clone::clone)
-    }
-
-    /// The folder above the current location (the archive's folder for an archive); on Windows the drive list
-    /// above a drive.
-    fn parent(&self) -> Option<Option<PathBuf>> {
-        let root = self.root.as_ref()?;
-        match root.parent() {
-            Some(parent) if !parent.as_os_str().is_empty() => Some(Some(parent.to_path_buf())),
-            _ if cfg!(windows) => Some(None),
-            _ => None,
-        }
     }
 
     /// What `path` contains: sub-folders first, then archives and model files, each sorted by name.
@@ -129,14 +118,10 @@ impl Browser {
         let mut actions = Vec::new();
         let inside_archive = self.root.as_deref().is_some_and(|r| !r.is_dir());
         ui.horizontal_wrapped(|ui| {
-            let up = self.parent();
-            if ui.add_enabled(up.is_some(), egui::Button::new("⬆ Up")).on_hover_text("Go up one folder").clicked() {
-                self.set_root(up.flatten());
-            }
             let all_hint = if inside_archive {
                 "Add every model of this archive folder, sub-folders included"
             } else {
-                "Add every model file in this folder (not in its sub-folders)"
+                "Add every model file in the current folder (not in its sub-folders)"
             };
             if ui.add_enabled(self.root.is_some(), egui::Button::new("Add all")).on_hover_text(all_hint).clicked()
                 && let Some(root) = self.root.clone()
@@ -146,7 +131,7 @@ impl Browser {
                     actions.push(Action::Add(models));
                 }
             }
-            if ui.button("🗁 Browse…").on_hover_text("Choose a folder to browse").clicked() {
+            if ui.button("🗁 Browse…").on_hover_text("Choose a folder to go to").clicked() {
                 actions.push(Action::PickFolder);
             }
             if ui.button("⟳").on_hover_text("Read the folders again").clicked() {
@@ -154,84 +139,75 @@ impl Browser {
             }
         });
         let location = self.root.as_ref().map_or_else(|| "Drives".to_string(), |r| r.display().to_string());
-        ui.label(egui::RichText::new(location).weak()).on_hover_text("Double-click a folder or archive to go into it");
+        ui.label(egui::RichText::new(location).weak());
         ui.separator();
 
         let items = match self.root.clone() {
             Some(root) => self.children(&root),
             None => Ok(self.drives.get_or_insert_with(drives).clone()),
         };
-        egui::ScrollArea::both().auto_shrink(false).show(ui, |ui| match items {
-            Err(e) => {
-                ui.colored_label(ui.visuals().warn_fg_color, format!("Cannot read this location: {e}"));
+        let inside = self.root.as_deref().is_some_and(|r| !r.is_dir());
+        egui::ScrollArea::both().id_salt(&self.root).auto_shrink(false).show(ui, |ui| {
+            if let Some(root) = self.root.clone() {
+                let above = root.parent().map_or_else(|| "Drives".to_string(), |p| p.display().to_string());
+                if ui.link("⬆ ..").on_hover_text(format!("Up to {above}")).clicked() {
+                    self.set_root(root.parent().map(Path::to_path_buf));
+                }
             }
-            Ok(items) if items.is_empty() => {
-                ui.weak("No folders or model files here.");
-            }
-            Ok(items) => {
-                for item in &items {
-                    self.row(ui, item, loaded, &mut actions);
+            match items {
+                Err(e) => {
+                    ui.colored_label(ui.visuals().warn_fg_color, format!("Cannot read this folder: {e}"));
+                }
+                Ok(items) if items.is_empty() => {
+                    ui.weak("No folders or model files here.");
+                }
+                Ok(items) => {
+                    for item in &items {
+                        self.row(ui, item, inside, loaded, &mut actions);
+                    }
                 }
             }
         });
         actions
     }
 
-    /// One row; folders and archives expand to their contents (read when first opened).
-    fn row(&mut self, ui: &mut egui::Ui, item: &Item, loaded: &[PathBuf], actions: &mut Vec<Action>) {
+    /// One row of the current folder (`inside` an archive or not): folders and archives are links down into them.
+    fn row(&mut self, ui: &mut egui::Ui, item: &Item, inside: bool, loaded: &[PathBuf], actions: &mut Vec<Action>) {
         let name = display_name(&item.path);
         match item.kind {
             Kind::Folder | Kind::Archive => {
                 let icon = if item.kind == Kind::Folder { "🗀" } else { "📦" };
-                // the tick box: a folder's own model files (sub-folders can be huge), all the models of an archive
-                let in_archive = !item.path.is_dir();
-                let models = if item.kind == Kind::Folder && !in_archive && self.children(&item.path).is_err() {
-                    Vec::new() // unreadable: shown as such when opened
-                } else {
-                    self.models_in(&item.path, in_archive)
-                };
-                let is_shown = |p: &PathBuf| loaded.iter().any(|l| p.starts_with(l));
+                let inside = inside || item.kind == Kind::Archive;
+                // The tick box: a folder's own model files (sub-folders can be huge), all the models of an archive.
+                // Only what was read already is counted: a folder must not read every folder and archive it lists.
+                let known = inside && item.kind == Kind::Folder || self.listings.contains_key(&item.path);
+                let models = if known { self.models_in(&item.path, inside) } else { Vec::new() };
+                let is_shown = |p: &Path| loaded.iter().any(|l| p.starts_with(l));
                 let shown_count = models.iter().filter(|p| is_shown(p)).count();
-                let mut all = !models.is_empty() && shown_count == models.len();
-                let id = ui.make_persistent_id(&item.path);
-                let state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false);
-                let (_, header, _) = state
-                    .show_header(ui, |ui| {
-                        let partly = shown_count > 0 && !all;
-                        let tick =
-                            ui.add_enabled(!models.is_empty(), egui::Checkbox::new(&mut all, "").indeterminate(partly));
-                        if tick.changed() {
-                            actions.push(if all {
-                                Action::Add(models.iter().filter(|p| !is_shown(p)).cloned().collect())
-                            } else {
-                                Action::Remove(models.iter().filter(|p| is_shown(p)).cloned().collect())
-                            });
+                let mut all =
+                    if known { !models.is_empty() && shown_count == models.len() } else { is_shown(&item.path) };
+                let partly = !all && (shown_count > 0 || !known && loaded.iter().any(|l| l.starts_with(&item.path)));
+                ui.horizontal(|ui| {
+                    let tick = egui::Checkbox::new(&mut all, "").indeterminate(partly);
+                    if ui.add_enabled(!known || !models.is_empty(), tick).changed() {
+                        let mut models = models.clone();
+                        if !known {
+                            models = self.models_in(&item.path, inside); // reads it now
                         }
-                        let label = ui.add(egui::Label::new(format!("{icon} {name}")).sense(egui::Sense::click()));
+                        models.retain(|p| is_shown(p) != all);
                         if !models.is_empty() {
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.weak(models.len().to_string())
-                            });
+                            actions.push(if all { Action::Add(models) } else { Action::Remove(models) });
                         }
-                        label
-                    })
-                    .body(|ui| match self.children(&item.path) {
-                        Err(e) => {
-                            ui.colored_label(ui.visuals().warn_fg_color, e);
-                        }
-                        Ok(children) if children.is_empty() => {
-                            ui.weak("(no model files)");
-                        }
-                        Ok(children) => {
-                            for child in &children {
-                                self.row(ui, child, loaded, actions);
-                            }
-                        }
-                    });
-                let hint = format!("{}\nDouble-click to go into it", item.path.display());
-                if header.inner.on_hover_text(hint).double_clicked() {
-                    self.set_root(Some(item.path.clone()));
-                }
+                    }
+                    if ui.link(format!("{icon} {name}")).on_hover_text(item.path.display().to_string()).clicked() {
+                        self.set_root(Some(item.path.clone()));
+                    }
+                    if !models.is_empty() {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.weak(models.len().to_string())
+                        });
+                    }
+                });
             }
             Kind::Model => {
                 // in the scene on its own, or with a folder or archive opened whole
@@ -327,16 +303,21 @@ fn sort(items: &mut [Item]) {
     items.sort_by_key(|i| (i.kind == Kind::Model || i.kind == Kind::Archive, display_name(&i.path).to_lowercase()));
 }
 
-/// The drives of the computer (Windows); empty elsewhere.
+/// The drives of the computer (the root folder where there are none).
 fn drives() -> Vec<Item> {
     if !cfg!(windows) {
-        return Vec::new();
+        return vec![folder(Path::new("/"))];
     }
     (b'A'..=b'Z')
         .map(|letter| PathBuf::from(format!("{}:\\", letter as char)))
         .filter(|drive| drive.exists())
-        .map(|path| Item { path, kind: Kind::Folder, size: None })
+        .map(|path| folder(&path))
         .collect()
+}
+
+/// The row of a folder.
+fn folder(path: &Path) -> Item {
+    Item { path: path.to_path_buf(), kind: Kind::Folder, size: None }
 }
 
 #[cfg(test)]

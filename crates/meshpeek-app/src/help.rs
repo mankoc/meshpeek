@@ -71,13 +71,13 @@ pub const GUIDE: &[(&str, &[&str])] = &[
              command line.",
             "Several files can be open at once; they keep their own coordinates, so parts exported from one \
              assembly line up. File > Clear scene (Ctrl+W) removes everything.",
-            "The Files tab is a file browser. Expand folders and archives with their arrow; double-click a \
-             folder or an archive to go into it, and Up to go back out (above a drive it lists the drives). \
+            "The Files tab shows the current folder. Click a folder or an archive to go into it, and the .. link at \
+             the top to go up; above a drive it lists all the drives. Opening a file goes to its folder. \
              Tick a model to add it to the scene and untick it to take it out again; its size is shown next to \
              it. The tick box of a folder does the same for the models in it (not in its sub-folders), the one of \
              an archive for all of its models; it is half ticked when only some are shown. Add all adds every \
              model of the current folder. File > Open folder (or Browse…) \
-             chooses the folder to show.",
+             chooses a folder to go to.",
             "ZIP, 7z and RAR archives are browsed like folders: their models are read straight from the \
              archive, nothing is unpacked to disk.",
             "The left / right arrow keys open the previous / next model of the same folder or archive, alone in \

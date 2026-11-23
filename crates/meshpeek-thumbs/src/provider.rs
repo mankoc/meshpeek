@@ -39,9 +39,6 @@ impl IInitializeWithStream_Impl for Provider_Impl {
 impl IThumbnailProvider_Impl for Provider_Impl {
     fn GetThumbnail(&self, size: u32, bitmap: *mut HBITMAP, alpha: *mut WTS_ALPHATYPE) -> Result<()> {
         let stream = self.stream.borrow_mut().take().ok_or(E_FAIL)?;
-        // one file at a time: Explorer asks for several, and each can need a lot of memory
-        static ONE: Mutex<()> = Mutex::new(());
-        let _one = ONE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let (name, length) = describe(&stream)?;
         let mut data = Vec::new();
         read(&stream, &mut data, length.min(PREFIX as u64) as usize)?;
@@ -93,7 +90,9 @@ fn read(stream: &IStream, data: &mut Vec<u8>, length: usize) -> Result<()> {
     Ok(())
 }
 
-/// Run `work` on a thread with a big stack; a panic in it (a file the parsers trip over) becomes an error.
+/// Run `work` on a thread with a big stack, one at a time; a panic in it (a file the parsers trip over) becomes an
+/// error. `work` must not call COM, and no lock may be held around COM calls: while one waits, Windows lets this
+/// thread serve the next request, which would then wait for the lock for ever.
 fn on_big_stack<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Result<T> {
     static POOL: Once = Once::new();
     POOL.call_once(|| {
@@ -101,7 +100,12 @@ fn on_big_stack<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) ->
         let threads = std::thread::available_parallelism().map_or(1, |n| n.get().div_ceil(2).min(4));
         let _ = rayon::ThreadPoolBuilder::new().num_threads(threads).stack_size(STACK).build_global();
     });
-    let thread = std::thread::Builder::new().stack_size(STACK).spawn(work).map_err(|_| E_FAIL)?;
+    let one_at_a_time = move || {
+        static ONE: Mutex<()> = Mutex::new(()); // each file can need a lot of memory
+        let _one = ONE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        work()
+    };
+    let thread = std::thread::Builder::new().stack_size(STACK).spawn(one_at_a_time).map_err(|_| E_FAIL)?;
     thread.join().map_err(|_| E_FAIL.into())
 }
 
