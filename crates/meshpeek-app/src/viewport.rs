@@ -63,6 +63,29 @@ pub struct Viewport {
     height: f64,
     /// Mouse orbit around the world's vertical axis (turntable) instead of the view's axes (trackball).
     pub turntable: bool,
+    /// World axis all orbiting is limited to (chosen in the gizmo), if any.
+    pub lock: Option<DVec3>,
+    /// The view was turned in a way a turntable cannot (axis lock, roll): the mouse then orbits freely, so that the
+    /// next drag does not jump back to a level horizon. A standard view ends this.
+    tilted: bool,
+}
+
+/// Axes closer to the line of sight than this (length of their image on the screen) are turned by circling the pointer.
+const FACING: f64 = 0.3;
+
+/// The camera's right, up and viewing directions.
+fn frame_of(camera: &Camera) -> (DVec3, DVec3, DVec3) {
+    let (right, forward) = (camera.right(), camera.direction());
+    (right, right.cross(forward), forward)
+}
+
+/// How far (in the drag's unit) dragging by `dx`, `dy` (down) turns the scene about `axis`, so that its near side follows
+/// the pointer; `None` when the axis points at the viewer, where a straight drag has no direction.
+fn turn_by_drag(camera: &Camera, axis: DVec3, dx: f64, dy: f64) -> Option<f64> {
+    let (right, up, _) = frame_of(camera);
+    let (x, y) = (axis.dot(right), axis.dot(up));
+    let length = x.hypot(y);
+    (length >= FACING).then(|| (dx * y + dy * x) / length)
 }
 
 impl Viewport {
@@ -76,6 +99,8 @@ impl Viewport {
             rendered: None,
             height: 600.0,
             turntable: true,
+            lock: None,
+            tilted: false,
         }
     }
 
@@ -112,7 +137,22 @@ impl Viewport {
         let (direction, up) = view.direction();
         let distance = self.camera.distance();
         self.camera.view_from(direction, up, distance);
+        self.tilted = false;
         self.frame_target();
+    }
+
+    /// Turn the scene about the locked axis by `degrees`.
+    fn turn_locked(&mut self, axis: DVec3, degrees: f64) {
+        self.camera.orbit_about(axis, -degrees);
+        self.tilted = true;
+    }
+
+    /// Turn the scene parallel to the screen (positive: clockwise).
+    pub fn roll(&mut self, degrees: f64) {
+        if degrees != 0.0 {
+            self.camera.roll(degrees);
+            self.tilted = true;
+        }
     }
 
     /// Keyboard navigation while keys are held: Ctrl+arrows orbit, Shift+arrows pan, +/- or Page Up/Down zoom,
@@ -156,12 +196,19 @@ impl Viewport {
         if shift {
             let speed = 0.6 * self.height * dt; // pixels: 60% of the view height per second
             self.camera.pan(-horizontal * speed, -vertical * speed, self.height);
+        } else if let Some(axis) = self.lock {
+            // towards the viewer: the arrows turn it on the screen instead
+            let turn = turn_by_drag(&self.camera, axis, -horizontal, -vertical)
+                .unwrap_or((horizontal + vertical) * -axis.dot(self.camera.direction()).signum());
+            if turn != 0.0 {
+                self.turn_locked(axis, 90.0 * turn * dt);
+            }
         } else {
             self.camera.orbit(90.0 * horizontal * dt, 90.0 * vertical * dt);
         }
         let zoom = ((plus || equals || page_up) as i32 - (minus || page_down) as i32) as f64;
         self.camera.dolly(1.8f64.powf(zoom * dt));
-        self.camera.roll(90.0 * (q as i32 - e as i32) as f64 * dt);
+        self.roll(90.0 * (q as i32 - e as i32) as f64 * dt);
         true
     }
 
@@ -184,8 +231,15 @@ impl Viewport {
         let speed = self.height * dt; // pan: one view height per second at full deflection
         self.camera.pan(pan * tx * speed, -pan * ty * speed, self.height);
         self.camera.dolly(2.5f64.powf(zoom * tz * dt));
-        self.camera.orbit(-rotate * ry * 120.0 * dt, -rotate * rx * 120.0 * dt);
-        self.camera.roll(rotate * rz * 120.0 * dt);
+        if let Some(axis) = self.lock {
+            // the part of the cap's rotation that is about the axis
+            let (right, up, forward) = frame_of(&self.camera);
+            let turn = rx * axis.dot(right) + ry * axis.dot(up) + rz * axis.dot(forward);
+            self.turn_locked(axis, rotate * turn * 120.0 * dt);
+        } else {
+            self.camera.orbit(-rotate * ry * 120.0 * dt, -rotate * rx * 120.0 * dt);
+            self.camera.roll(rotate * rz * 120.0 * dt);
+        }
         true
     }
 
@@ -226,8 +280,9 @@ impl Viewport {
         self.gizmo(ui, rect);
     }
 
-    /// Orientation gizmo in the top-right corner: the axes turn with the camera; clicking an axis end looks
-    /// along that axis (same as the standard views).
+    /// Orientation gizmo in the top-right corner: the axes turn with the camera. Clicking an axis limits rotation to it
+    /// (again: frees it), double-clicking an end looks along it (same as the standard views). The arrows below turn the
+    /// scene parallel to the screen.
     fn gizmo(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
         const RADIUS: f32 = 36.0;
         let centre = egui::pos2(rect.right() - RADIUS - 18.0, rect.top() + RADIUS + 18.0);
@@ -248,14 +303,14 @@ impl Viewport {
             for (sign, view) in [(1.0, positive), (-1.0, negative)] {
                 let a = axis * sign;
                 let offset = egui::vec2(a.dot(right) as f32, -a.dot(up) as f32) * RADIUS;
-                ends.push((centre + offset, a.dot(forward), label, color, view, sign > 0.0));
+                ends.push((centre + offset, a.dot(forward), label, color, view, sign > 0.0, axis));
             }
         }
         ends.sort_by(|a, b| b.1.total_cmp(&a.1)); // far ends first, so near ones are drawn on top
 
         let pointer = response.hover_pos();
         let hovered = pointer.and_then(|p| {
-            ends.iter().rev().find(|e| e.0.distance(p) < 11.0).map(|e| e.4) // nearest-to-viewer end wins
+            ends.iter().rev().find(|e| e.0.distance(p) < 11.0).map(|e| (e.4, e.6, e.2)) // nearest-to-viewer end wins
         });
         let painter = ui.painter_at(area);
         painter.circle_filled(
@@ -263,8 +318,14 @@ impl Viewport {
             RADIUS + 12.0,
             egui::Color32::from_black_alpha(if response.hovered() { 70 } else { 40 }),
         );
-        for &(pos, _, label, color, view, positive) in &ends {
-            let highlight = hovered == Some(view);
+        for &(pos, _, label, color, view, positive, axis) in &ends {
+            let highlight = hovered.is_some_and(|h| h.0 == view);
+            let locked = self.lock == Some(axis);
+            let color = if self.lock.is_some() && !locked { color.gamma_multiply(0.35) } else { color };
+            if locked {
+                painter.line_segment([centre, pos], egui::Stroke::new(4.0_f32, egui::Color32::WHITE));
+                painter.circle_filled(pos, if positive { 11.0 } else { 9.0 }, egui::Color32::WHITE);
+            }
             if positive {
                 painter.line_segment([centre, pos], egui::Stroke::new(2.0_f32, color));
                 painter.circle_filled(pos, if highlight { 10.0 } else { 8.5 }, color);
@@ -280,11 +341,48 @@ impl Viewport {
                 painter.circle_filled(pos, if highlight { 8.0 } else { 6.5 }, fill);
             }
         }
-        if let Some(view) = hovered {
+        if let Some((view, axis, label)) = hovered {
             let name = View::ALL.iter().find(|(v, _, _)| *v == view).map_or("", |(_, label, _)| label);
-            response.clone().on_hover_text(format!("{name} view"));
+            let locked = self.lock == Some(axis);
+            let click =
+                if locked { "Click: rotate freely again".into() } else { format!("Click: rotate only about {label}") };
+            response.clone().on_hover_text(format!("{click}\nDouble-click: {} view", name.to_lowercase()));
+            // a double-click is also two clicks, which lock and free again
             if response.clicked() {
+                self.lock = (!locked).then_some(axis);
+            }
+            if response.double_clicked() {
                 self.show_view(view);
+            }
+            if response.clicked() {
+                ui.ctx().request_repaint();
+            }
+        }
+        self.roll_arrows(ui, centre + egui::vec2(0.0, RADIUS + 28.0));
+    }
+
+    /// The two arrows that turn the scene parallel to the screen: by 15 degrees a click, on and on while held.
+    fn roll_arrows(&mut self, ui: &mut egui::Ui, centre: egui::Pos2) {
+        for (x, icon, sign, name) in [(-18.0, "⟲", -1.0, "left"), (18.0, "⟳", 1.0, "right")] {
+            let at = egui::Rect::from_center_size(centre + egui::vec2(x, 0.0), egui::Vec2::splat(28.0));
+            let button = ui
+                .interact(at, ui.id().with(("roll", name)), egui::Sense::click())
+                .on_hover_text(format!("Turn {name} on the screen (hold to keep turning)"));
+            let alpha = if button.hovered() { 90 } else { 40 };
+            ui.painter().circle_filled(at.center(), 13.0, egui::Color32::from_black_alpha(alpha));
+            let font = egui::FontId::proportional(18.0);
+            ui.painter().text(at.center(), egui::Align2::CENTER_CENTER, icon, font, egui::Color32::WHITE);
+            if button.clicked() {
+                self.roll(15.0 * sign);
+                ui.ctx().request_repaint();
+            }
+            if button.is_pointer_button_down_on() {
+                let (held, dt) = ui.input(|i| {
+                    (i.pointer.press_start_time().map_or(0.0, |start| i.time - start), i.stable_dt.min(0.1) as f64)
+                });
+                if held > 0.3 {
+                    self.roll(90.0 * sign * dt);
+                }
                 ui.ctx().request_repaint();
             }
         }
@@ -303,7 +401,20 @@ impl Viewport {
                 self.camera.pan(dx, dy, h);
             } else if response.dragged_by(egui::PointerButton::Primary) {
                 // a full-width drag turns 200 degrees, like VTK
-                if self.turntable {
+                if let Some(axis) = self.lock {
+                    let turn = turn_by_drag(&self.camera, axis, 200.0 * dx / w, 200.0 * dy / h);
+                    let turn = turn.unwrap_or_else(|| {
+                        // circle the pointer around the middle of the view
+                        let Some(now) = response.interact_pointer_pos().map(|p| p - rect.center()) else { return 0.0 };
+                        let before = now - delta;
+                        let angle = f64::from(before.x * now.y - before.y * now.x).atan2(f64::from(before.dot(now)));
+                        // clockwise on the screen is positive here; about an axis away from the viewer, too
+                        angle.to_degrees() * axis.dot(self.camera.direction()).signum()
+                    });
+                    if turn != 0.0 {
+                        self.turn_locked(axis, turn);
+                    }
+                } else if self.turntable && !self.tilted {
                     self.camera.orbit_turntable(-200.0 * dx / w, -200.0 * dy / h);
                 } else {
                     self.camera.orbit(-200.0 * dx / w, -200.0 * dy / h);
@@ -318,5 +429,67 @@ impl Viewport {
                 self.camera.dolly(1.1f64.powf(scroll / 50.0));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Where a point of the scene is on the screen (right, up).
+    fn seen(camera: &Camera, p: DVec3) -> (f64, f64) {
+        let (right, up, _) = frame_of(camera);
+        (p.dot(right), p.dot(up))
+    }
+
+    #[test]
+    fn the_near_side_follows_a_drag_about_the_locked_axis() {
+        for (view, axis, dx, dy) in [
+            (View::Front, DVec3::Z, 5.0, 0.0),
+            (View::Front, DVec3::X, 0.0, 5.0),
+            (View::Right, DVec3::Z, -5.0, 0.0),
+            (View::Top, DVec3::X, 0.0, -5.0),
+            (View::Isometric, DVec3::Z, 5.0, 0.0),
+        ] {
+            let (direction, up) = view.direction();
+            let mut camera = Camera::default();
+            camera.view_from(direction, up, 100.0);
+            let near = -camera.direction() * 10.0;
+            let before = seen(&camera, near);
+            let turn = turn_by_drag(&camera, axis, dx, dy).unwrap();
+            camera.orbit_about(axis, -turn);
+            let after = seen(&camera, near);
+            let moved = (after.0 - before.0) * dx - (after.1 - before.1) * dy;
+            assert!(moved > 0.0, "{view:?} {axis}: {before:?} {after:?}");
+        }
+    }
+
+    #[test]
+    fn a_locked_axis_keeps_its_direction() {
+        let mut camera = Camera::default();
+        let before = (seen(&camera, DVec3::X), DVec3::X.dot(camera.direction()), camera.distance());
+        camera.orbit_about(DVec3::X, 77.0);
+        let after = (seen(&camera, DVec3::X), DVec3::X.dot(camera.direction()), camera.distance());
+        assert!((before.0.0 - after.0.0).abs() < 1e-9 && (before.0.1 - after.0.1).abs() < 1e-9);
+        assert!((before.1 - after.1).abs() < 1e-9 && (before.2 - after.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_positive_roll_turns_the_scene_clockwise() {
+        let mut camera = Camera::default();
+        camera.view_from(-DVec3::Y, DVec3::Z, 100.0);
+        camera.roll(15.0);
+        assert!(seen(&camera, DVec3::Z).0 > 0.0); // what was up leans to the right
+    }
+
+    #[test]
+    fn an_axis_towards_the_viewer_has_no_straight_drag() {
+        let mut camera = Camera::default();
+        camera.view_from(DVec3::Z, DVec3::Y, 100.0);
+        assert_eq!(turn_by_drag(&camera, DVec3::Z, 5.0, 0.0), None);
+        // circling: turning +5 degrees about Z, which points at the viewer, is counter-clockwise on the screen
+        let mut turned = camera;
+        turned.orbit_about(DVec3::Z, -5.0);
+        assert!(seen(&turned, DVec3::X).1 > 0.0);
     }
 }

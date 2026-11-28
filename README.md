@@ -36,7 +36,9 @@ meshpeek [--cpu] [files...]
 | Zoom | Mouse wheel, or right drag | + / − or Page Up / Page Down |
 | Roll | | Q / E |
 | Fit all | | F |
-| Standard views | Click an axis of the gizmo (top right) | 0 Isometric, 1 Front, 2 Back, 3 Left, 4 Right, 5 Top, 6 Bottom |
+| Standard views | Double-click an axis end of the gizmo (top right) | 0 Isometric, 1 Front, 2 Back, 3 Left, 4 Right, 5 Top, 6 Bottom |
+| Rotate about one axis only | Click the axis in the gizmo (again: free) | |
+| Turn parallel to the screen | ⟲ / ⟳ below the gizmo | Q / E |
 | Wireframe | | W |
 | Centre on a model | Crosshair icon next to it in the Objects panel (click again, or F, to stop) | |
 | Help | | F1 (Help → Controls); Help → User guide |

@@ -1090,7 +1090,7 @@ impl MeshPeekApp {
 
     /// Test hook: `MESHPEEK_SNAPSHOT_ACTIONS="theme=Light;center=Bust;view=Front;orbit=90,0;pan=100,0;dolly=4;controls;guide;about;preferences"` is
     /// applied once loading finished, before the snapshot. `preferences=<section>` opens Preferences on a section. `wait=<ms>` pauses (background preloads go on) and
-    /// takes the preloads that finished; `remove=<file name>` unticks a file in the Files tab; `next` / `previous` step through the folder like the arrow keys; `files` shows the Files tab; `arrange` arranges the objects; `colours` colours each model; `updates` checks for updates.
+    /// takes the preloads that finished; `lock=X` locks the rotation to an axis; `roll=<degrees>` turns the view; `remove=<file name>` unticks a file in the Files tab; `next` / `previous` step through the folder like the arrow keys; `files` shows the Files tab; `arrange` arranges the objects; `colours` colours each model; `updates` checks for updates.
     fn snapshot_actions(&mut self, ctx: &egui::Context) {
         let Ok(actions) = std::env::var("MESHPEEK_SNAPSHOT_ACTIONS") else { return };
         for action in actions.split(';').map(str::trim) {
@@ -1122,6 +1122,11 @@ impl MeshPeekApp {
                         self.preferences_section = section;
                     }
                 }
+                Some(("lock", axis)) => {
+                    let axes = [("X", glam::DVec3::X), ("Y", glam::DVec3::Y), ("Z", glam::DVec3::Z)];
+                    self.viewport.lock = axes.iter().find(|(name, _)| *name == axis).map(|(_, a)| *a);
+                }
+                Some(("roll", degrees)) => self.viewport.roll(degrees.parse().unwrap_or(0.0)),
                 Some(("remove", name)) => {
                     let file = self.entries.iter().find(|e| file_name(&e.source) == name).map(|e| e.source.clone());
                     file.inspect(|f| self.remove_file(f));

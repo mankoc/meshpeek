@@ -37,7 +37,7 @@ impl Camera {
     }
 
     /// Unit vector pointing to the right of the screen.
-    fn right(&self) -> DVec3 {
+    pub fn right(&self) -> DVec3 {
         self.direction().cross(self.up).normalize_or(DVec3::X)
     }
 
@@ -71,6 +71,14 @@ impl Camera {
             .unwrap_or(DVec3::X);
         self.position = self.focal + radius * (polar.sin() * heading + polar.cos() * DVec3::Z);
         self.up = DVec3::Z;
+        self.orthogonalize_up();
+    }
+
+    /// Turn the camera around the focal point about a world axis by `degrees` (the scene seems to turn the other way).
+    pub fn orbit_about(&mut self, axis: DVec3, degrees: f64) {
+        let turn = DQuat::from_axis_angle(axis.normalize(), degrees.to_radians());
+        self.position = self.focal + turn * (self.position - self.focal);
+        self.up = (turn * self.up).normalize();
         self.orthogonalize_up();
     }
 

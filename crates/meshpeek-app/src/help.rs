@@ -10,7 +10,9 @@ pub const CONTROLS: &[(&str, &[(&str, &str)])] = &[
             ("Left drag", "Orbit (Preferences: turntable around the vertical axis, or trackball around the view)"),
             ("Middle drag, or Shift + left drag", "Pan"),
             ("Mouse wheel, or right drag", "Zoom"),
-            ("Gizmo (top right): click an axis", "Look along that axis"),
+            ("Gizmo (top right): click an axis", "Rotate only about that axis; click again to rotate freely"),
+            ("Gizmo: double-click an axis end", "Look along that axis"),
+            ("⟲ / ⟳ below the gizmo", "Turn the model parallel to the screen (hold to keep turning)"),
         ],
     ),
     (

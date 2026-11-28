@@ -2,6 +2,16 @@
 
 All notable changes to MeshPeek, newest first.
 
+## 0.5.15 — 2026-11-28
+
+### Added
+- **Rotation lock**: a click on an axis of the gizmo (top right) limits all rotation to that axis, another click frees it.
+  Looking along an axis is now a double-click on its end.
+- **Arrows below the gizmo** turn the model parallel to the screen: 15° a click, on and on while held.
+
+### Changed
+- After a roll or a rotation about a locked axis, dragging no longer jumps back to a level horizon; a standard view does.
+
 ## 0.5.14 — 2026-11-23
 
 ### Changed

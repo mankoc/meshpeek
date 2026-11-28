@@ -18,7 +18,7 @@ Sample files are in `samples/` (Git LFS).
       Typing in a text field (e.g. Preferences) does not move the view.
 - [ ] View → Theme: Light, Dark and System switch the UI and the 3D background/plate colours immediately and
       are remembered after a restart.
-- [ ] F fits everything; 0–6 switch to the standard views; the gizmo's axis ends do the same when clicked.
+- [ ] F fits everything; 0–6 switch to the standard views; the gizmo's axis ends do the same when double-clicked; a click locks the rotation to the axis.
 - [ ] W toggles wireframe (View menu entry disabled if the GPU cannot draw lines).
 - [ ] The plate, build-volume outline and origin axes appear for `.lys` files.
 - [ ] Resizing the window keeps the image sharp and correctly proportioned.
